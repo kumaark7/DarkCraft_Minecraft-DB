@@ -1,9 +1,8 @@
-// Central service exports — swap mockAdapter for realAdapter to connect real backend
-export { serverService } from './mockAdapter';
-export { consoleService } from './mockAdapter';
-export { playerService } from './mockAdapter';
-export { fileService } from './mockAdapter';
-export { pluginService } from './mockAdapter';
-export { backupService } from './mockAdapter';
-export { scheduleService } from './mockAdapter';
-export { globalService } from './mockAdapter';
+import * as mockServices from './mockAdapter';
+import { resolveServiceConfig } from './config';
+import { realServices } from './realAdapter';
+
+export const serviceConfig = resolveServiceConfig();
+const services = serviceConfig.dataSource === 'real' ? realServices : mockServices;
+
+export const { serverService, consoleService, playerService, fileService, pluginService, backupService, scheduleService, globalService } = services;

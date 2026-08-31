@@ -1,8 +1,8 @@
-# Minecraft Server Dashboard
+# DarkCraft Minecraft Server Dashboard
 
-A frontend-only Minecraft server management dashboard built with React, TypeScript, Vite, and Tailwind CSS. The application provides a complete mock-driven interface for managing servers, players, console activity, files, plugins, backups, schedules, bots, notifications, and global settings.
+A full-stack Minecraft server management dashboard built with React, TypeScript, Vite, Tailwind CSS, and a lightweight Fastify backend. It manages servers, players, console activity, files, plugins, backups, schedules, bots, notifications, and global settings.
 
-The project currently runs entirely against an in-memory mock service adapter. It does not require a Minecraft server, database, authentication provider, or external API.
+The mock adapter remains the default for UI development. Real mode connects the same service interfaces to the bundled REST/WebSocket backend.
 
 ## Tech stack
 
@@ -16,6 +16,8 @@ The project currently runs entirely against an in-memory mock service adapter. I
 - Sonner notifications
 - Biome
 - pnpm
+- Fastify and WebSocket
+- Atomic JSON persistence
 
 ## Prerequisites
 
@@ -38,6 +40,14 @@ corepack pnpm install
 corepack pnpm dev
 ```
 
+Run the backend in a second terminal:
+
+```bash
+corepack pnpm api:dev
+```
+
+Copy `.env.example` to `.env.local` and set `VITE_DATA_SOURCE=real` to connect the frontend through Vite's `/api` proxy.
+
 The development server runs at the URL printed by Vite, normally `http://localhost:5173`.
 
 ## Validation
@@ -45,6 +55,7 @@ The development server runs at the URL printed by Vite, normally `http://localho
 ```bash
 corepack pnpm typecheck
 corepack pnpm lint
+corepack pnpm test
 corepack pnpm build
 ```
 
@@ -63,13 +74,21 @@ src/
   layouts/       Desktop and mobile application shell
   mocks/         In-memory Minecraft dashboard data
   pages/         Global pages and server-management tabs
-  services/      Service interfaces and the active mock adapter
+  services/      Service interfaces plus mock and real adapters
   types/         Shared domain models
   utils/         Domain formatting and display helpers
   App.tsx        Router host and global notifications
   main.tsx       Browser entry point
   routes.tsx     Route configuration
   index.css      Tailwind layers, theme tokens, and global styles
+```
+
+```text
+server/
+  app.ts         REST/WebSocket routes and domain operations
+  processManager.ts  Safe Minecraft process and console lifecycle
+  security.ts    Root sandbox, traversal, symlink, and read-only policy
+  store.ts       Atomic local metadata persistence
 ```
 
 ## Service and mock architecture
@@ -83,23 +102,13 @@ Pages and components
         ↓
 Service interfaces and exports
         ↓
-In-memory mock adapter
+Selected mock or real adapter
 ```
 
-`src/services/index.ts` is the integration boundary. A future backend adapter can implement the existing interfaces and replace the mock exports without moving mock data into pages or rewriting the dashboard UI.
+`src/services/index.ts` selects the adapter through `VITE_DATA_SOURCE=mock|real`. Pages and hooks do not depend on the backend implementation.
 
-## Backend integration status
+## Backend
 
-Real Minecraft server operations are intentionally not connected yet. The following areas still require backend implementations:
+The backend is included and covers the complete service interface. It stores runtime metadata under `.data/`, confines Minecraft files to `MINECRAFT_SERVERS_ROOT`, and supports an enforced `DASHBOARD_READ_ONLY=true` mode.
 
-- server lifecycle and status updates
-- live console streaming and command execution
-- player, operator, whitelist, and ban management
-- file browsing, editing, upload, and download
-- plugin and mod operations
-- backup and restore jobs
-- schedule execution
-- bots, activity, logs, and notifications
-- persistent global and per-server settings
-
-Keep API URLs, credentials, and environment-specific configuration outside the frontend source when adding the real adapter.
+Production builds emit `dist/` and `dist-server/`. Run the combined service with `corepack pnpm start`. See [docs/BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) for endpoints, security guarantees and deployment boundaries.
