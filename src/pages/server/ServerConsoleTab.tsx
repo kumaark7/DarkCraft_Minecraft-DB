@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   ChevronDown, Play, Pause, Trash2, Search, X,
-  ArrowUp, ChevronUp, SendHorizonal, Clock, Info
+  SendHorizonal, Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,7 @@ const VIEW_MODES: { value: ConsoleViewMode; label: string }[] = [
   { value: 'older', label: 'Older' },
 ];
 
-function colorLine(msg: string, sev: ConsoleSeverity): string {
+function colorLine(sev: ConsoleSeverity): string {
   return severityColors[sev];
 }
 
@@ -170,7 +170,7 @@ export default function ServerConsoleTab() {
           entries.map(entry => (
             <div
               key={entry.id}
-              className={cn('leading-relaxed break-words whitespace-pre-wrap', colorLine(entry.message, entry.severity))}
+              className={cn('leading-relaxed break-words whitespace-pre-wrap', colorLine(entry.severity))}
             >
               {entry.message}
             </div>

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Upload, ArrowLeft, FileArchive, Folder, CheckCircle2,
-  Package, Globe, Settings, AlertTriangle
+  Package, Globe, Settings
 } from 'lucide-react';
 import { Layout } from '@/layouts/Layout';
 import { Button } from '@/components/ui/button';

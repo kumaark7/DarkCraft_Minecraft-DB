@@ -1,6 +1,5 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import IntersectObserver from '@/components/common/IntersectObserver';
 import { Toaster } from '@/components/ui/sonner';
 import { routes, type RouteConfig } from './routes';
 
@@ -15,7 +14,6 @@ function renderRoutes(routeList: RouteConfig[]) {
 const App: React.FC = () => {
   return (
     <Router>
-      <IntersectObserver />
       <div className="flex flex-col min-h-screen">
         <main className="flex-grow">
           <Routes>

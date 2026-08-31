@@ -65,7 +65,7 @@ function PlayerRow({ player, actions }: { player: Player; actions?: React.ReactN
 
 export default function ServerPlayersTab() {
   const { id } = useParams<{ id: string }>();
-  const { online, whitelist, operators, banned, bannedIPs, loading,
+  const { online, whitelist, operators, banned, bannedIPs,
     kick, ban, unban, op, deop, addWhitelist, removeWhitelist, unbanIP } = usePlayers(id!);
 
   const [tab, setTab] = useState<PlayerTab>('online');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Play, Square, RotateCcw, Skull, Terminal, Settings, Download, MoreHorizontal, Trash2 } from 'lucide-react';
 import { cn, formatUptime, formatBytes, serverIconFallback } from '@/utils';
 import { ServerStatusBadge } from './ServerStatusBadge';
@@ -20,7 +20,6 @@ interface Props {
 }
 
 export function ServerCard({ server, onStart, onStop, onRestart, onKill, onDelete, onExport, compact }: Props) {
-  const navigate = useNavigate();
   const [killConfirm, setKillConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');

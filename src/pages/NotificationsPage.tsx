@@ -4,7 +4,7 @@ import { formatTimeAgo, cn } from '@/utils';
 import { Button } from '@/components/ui/button';
 import {
   Bell, BellOff, CheckCheck, Server, Cpu, MemoryStick, HardDrive,
-  Archive, Calendar, AlertTriangle, Info, CheckCircle2
+  Archive, Calendar, AlertTriangle, CheckCircle2
 } from 'lucide-react';
 import { EmptyState } from '@/components/shared/States';
 import type { AppNotification } from '@/types';

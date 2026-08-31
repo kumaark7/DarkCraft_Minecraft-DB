@@ -9,7 +9,6 @@ import type {
   BannedIP,
   ConsoleEntry,
   ConsoleViewMode,
-  ConsoleSeverity,
   ServerFile,
   Plugin,
   Mod,

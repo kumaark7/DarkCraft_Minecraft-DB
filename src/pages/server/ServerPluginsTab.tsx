@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EmptyState, LoadingState } from '@/components/shared/States';
 import { pluginService } from '@/services';
-import { formatBytes, cn } from '@/utils';
+import { formatBytes } from '@/utils';
 import { useServer } from '@/hooks/useServers';
 import { toast } from 'sonner';
 import type { Plugin, Mod } from '@/types';

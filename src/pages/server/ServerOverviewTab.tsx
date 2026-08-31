@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import {
   Cpu, MemoryStick, HardDrive, Activity, Users, Clock,
-  Zap, Network, Info, Terminal, Shield, FolderOpen
+  Zap, Network, Info, Terminal
 } from 'lucide-react';
 import { ProgressBar } from '@/components/shared/ProgressBar';
 import { useServer } from '@/hooks/useServers';

@@ -4,10 +4,10 @@
 // ============================================================
 import type {
   Server, ServerStats, ServerSettings, Player, BannedIP,
-  ConsoleEntry, ConsoleViewMode,
-  ServerFile, Plugin, Mod, Backup, BackupProgress,
-  Schedule, ActivityEvent, AppNotification, LogEntry,
-  HostStats, Bot, GlobalSettings, ImportInspection, ExportProgress,
+  ConsoleEntry,
+  ServerFile, Plugin, Mod, Backup,
+  Schedule, AppNotification,
+  Bot, GlobalSettings, ImportInspection,
 } from '@/types';
 import type {
   IServerService, IConsoleService, IPlayerService, IFileService,
@@ -168,7 +168,7 @@ export const serverService: IServerService = {
     };
     return { inspectionId, inspection };
   },
-  async confirmImport(inspectionId, serverName) {
+  async confirmImport(_inspectionId, serverName) {
     await delay(3000);
     const newServer: Server = {
       id: `server-${Date.now()}`,
@@ -320,8 +320,8 @@ export const playerService: IPlayerService = {
 // ============================================================
 export const fileService: IFileService = {
   async getFiles(id, path) { await delay(300); return _files[id]?.[path] ?? []; },
-  async getFileContent(id, path) { await delay(200); return _fileContents[path] ?? `# File: ${path}\n# Content not available in demo\n`; },
-  async saveFile(id, path, content) { await delay(400); _fileContents[path] = content; },
+  async getFileContent(_id, path) { await delay(200); return _fileContents[path] ?? `# File: ${path}\n# Content not available in demo\n`; },
+  async saveFile(_id, path, content) { await delay(400); _fileContents[path] = content; },
   async uploadFile() { await delay(1000); },
   async downloadFile() { await delay(300); },
   async deleteFile(id, path) {

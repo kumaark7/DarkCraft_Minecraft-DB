@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Layout } from '@/layouts/Layout';
 import { useActivity } from '@/hooks/useGlobal';
-import { formatDateTime, cn } from '@/utils';
+import { formatDateTime } from '@/utils';
 import { Input } from '@/components/ui/input';
 import { Search, Activity as ActivityIcon, Server, Users, Archive, Settings, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { EmptyState } from '@/components/shared/States';

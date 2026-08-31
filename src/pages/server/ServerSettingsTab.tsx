@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
@@ -74,7 +73,6 @@ export default function ServerSettingsTab() {
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showRaw, setShowRaw] = useState(false);
   const [rawProps, setRawProps] = useState('');
   const [rawDirty, setRawDirty] = useState(false);
 

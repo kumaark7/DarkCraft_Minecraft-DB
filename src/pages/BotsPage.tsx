@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import { Layout } from '@/layouts/Layout';
 import { useBots } from '@/hooks/useGlobal';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/States';
-import { formatTimeAgo, cn } from '@/utils';
+import { cn } from '@/utils';
 import { Play, Square, Bot, Server, Activity, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 

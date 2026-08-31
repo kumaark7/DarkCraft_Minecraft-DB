@@ -1,16 +1,10 @@
 import tailwindAnimate from 'tailwindcss-animate';
-import containerQuery from '@tailwindcss/container-queries';
-import intersect from 'tailwindcss-intersect';
 
 export default {
     darkMode: ['class'],
     content: [
         './index.html',
-        './pages/**/*.{ts,tsx}',
-        './components/**/*.{ts,tsx}',
-        './app/**/*.{ts,tsx}',
-        './src/**/*.{ts,tsx}',
-        './node_modules/streamdown/dist/**/*.js'
+        './src/**/*.{ts,tsx}'
     ],
     safelist: ['border', 'border-border'],
     prefix: '',
@@ -147,27 +141,6 @@ export default {
         }
     },
     plugins: [
-        tailwindAnimate,
-        containerQuery,
-        intersect,
-        function ({addUtilities}) {
-            addUtilities(
-                {
-                    '.border-t-solid': {'border-top-style': 'solid'},
-                    '.border-r-solid': {'border-right-style': 'solid'},
-                    '.border-b-solid': {'border-bottom-style': 'solid'},
-                    '.border-l-solid': {'border-left-style': 'solid'},
-                    '.border-t-dashed': {'border-top-style': 'dashed'},
-                    '.border-r-dashed': {'border-right-style': 'dashed'},
-                    '.border-b-dashed': {'border-bottom-style': 'dashed'},
-                    '.border-l-dashed': {'border-left-style': 'dashed'},
-                    '.border-t-dotted': {'border-top-style': 'dotted'},
-                    '.border-r-dotted': {'border-right-style': 'dotted'},
-                    '.border-b-dotted': {'border-bottom-style': 'dotted'},
-                    '.border-l-dotted': {'border-left-style': 'dotted'},
-                },
-                ['responsive']
-            );
-        },
+        tailwindAnimate
     ],
 };

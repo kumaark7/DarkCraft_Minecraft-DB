@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Plus, Upload, Server, ArrowLeft } from 'lucide-react';
 import { Layout } from '@/layouts/Layout';
-import { Button } from '@/components/ui/button';
 
 export default function AddServerPage() {
   const navigate = useNavigate();

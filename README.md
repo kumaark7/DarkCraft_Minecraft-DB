@@ -1,91 +1,105 @@
-# Welcome to Your Miaoda Project
+# Minecraft Server Dashboard
 
-## Project Info
+A frontend-only Minecraft server management dashboard built with React, TypeScript, Vite, and Tailwind CSS. The application provides a complete mock-driven interface for managing servers, players, console activity, files, plugins, backups, schedules, bots, notifications, and global settings.
 
-## Project Directory
+The project currently runs entirely against an in-memory mock service adapter. It does not require a Minecraft server, database, authentication provider, or external API.
 
-```
-├── README.md # Documentation
-├── components.json # Component library configuration
-├── index.html # Entry file
-├── package.json # Package management
-├── postcss.config.js # PostCSS configuration
-├── public # Static resources directory
-│   ├── favicon.png # Icon
-│   └── images # Image resources
-├── src # Source code directory
-│   ├── App.tsx # Entry file
-│   ├── components # Components directory
-│   ├── context # Context directory
-│   ├── db # Database configuration directory
-│   ├── hooks # Common hooks directory
-│   ├── index.css # Global styles
-│   ├── layout # Layout directory
-│   ├── lib # Utility library directory
-│   ├── main.tsx # Entry file
-│   ├── routes.tsx # Routing configuration
-│   ├── pages # Pages directory
-│   ├── services # Database interaction directory
-│   ├── types # Type definitions directory
-├── tsconfig.app.json # TypeScript frontend configuration file
-├── tsconfig.json # TypeScript configuration file
-├── tsconfig.node.json # TypeScript Node.js configuration file
-└── vite.config.ts # Vite configuration file
+## Tech stack
+
+- React 18
+- TypeScript 5
+- Vite 7
+- React Router
+- Tailwind CSS
+- Radix UI primitives
+- Lucide icons
+- Sonner notifications
+- Biome
+- pnpm
+
+## Prerequisites
+
+- Node.js 20.19 or newer, or Node.js 22.12 or newer
+- Corepack enabled for pnpm
+
+```bash
+corepack enable
 ```
 
-## Tech Stack
+## Installation
 
-Vite, TypeScript, React, Supabase
-
-## Development Guidelines
-
-### How to edit code locally?
-
-You can choose [VSCode](https://code.visualstudio.com/Download) or any IDE you prefer. The only requirement is to have Node.js and npm installed.
-
-### Environment Requirements
-
-```
-# Node.js ≥ 20
-# npm ≥ 10
-Example:
-# node -v   # v20.18.3
-# npm -v    # 10.8.2
+```bash
+corepack pnpm install
 ```
 
-### Installing Node.js on Windows
+## Development
 
-```
-# Step 1: Visit the Node.js official website: https://nodejs.org/, click download. The website will automatically suggest a suitable version (32-bit or 64-bit) for your system.
-# Step 2: Run the installer: Double-click the downloaded installer to run it.
-# Step 3: Complete the installation: Follow the installation wizard to complete the process.
-# Step 4: Verify installation: Open Command Prompt (cmd) or your IDE terminal, and type `node -v` and `npm -v` to check if Node.js and npm are installed correctly.
+```bash
+corepack pnpm dev
 ```
 
-### Installing Node.js on macOS
+The development server runs at the URL printed by Vite, normally `http://localhost:5173`.
 
-```
-# Step 1: Using Homebrew (Recommended method): Open Terminal. Type the command `brew install node` and press Enter. If Homebrew is not installed, you need to install it first by running the following command in Terminal:
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-Alternatively, use the official installer: Visit the Node.js official website. Download the macOS .pkg installer. Open the downloaded .pkg file and follow the prompts to complete the installation.
-# Step 2: Verify installation: Open Command Prompt (cmd) or your IDE terminal, and type `node -v` and `npm -v` to check if Node.js and npm are installed correctly.
-```
+## Validation
 
-### After installation, follow these steps:
-
-```
-# Step 1: Download the code package
-# Step 2: Extract the code package
-# Step 3: Open the code package with your IDE and navigate into the code directory
-# Step 4: In the IDE terminal, run the command to install dependencies: npm i
-# Step 5: In the IDE terminal, run the command to start the development server: npm run dev -- --host 127.0.0.1
-# Step 6: if step 5 failed, try this command to start the development server: npx vite --host 127.0.0.1
+```bash
+corepack pnpm typecheck
+corepack pnpm lint
+corepack pnpm build
 ```
 
-### How to develop backend services?
+## Production preview
 
-Configure environment variables and install relevant dependencies.If you need to use a database, please use the official version of Supabase.
+```bash
+corepack pnpm preview
+```
 
-## Learn More
+## Project structure
 
-You can also check the help documentation: Download and Building the app（ [https://intl.cloud.baidu.com/en/doc/MIAODA/s/download-and-building-the-app-en](https://intl.cloud.baidu.com/en/doc/MIAODA/s/download-and-building-the-app-en)）to learn more detailed content.
+```text
+src/
+  components/    Shared dashboard and UI components
+  hooks/         React hooks that consume the service boundary
+  layouts/       Desktop and mobile application shell
+  mocks/         In-memory Minecraft dashboard data
+  pages/         Global pages and server-management tabs
+  services/      Service interfaces and the active mock adapter
+  types/         Shared domain models
+  utils/         Domain formatting and display helpers
+  App.tsx        Router host and global notifications
+  main.tsx       Browser entry point
+  routes.tsx     Route configuration
+  index.css      Tailwind layers, theme tokens, and global styles
+```
+
+## Service and mock architecture
+
+The dashboard keeps presentation code separate from data access:
+
+```text
+Pages and components
+        ↓
+      Hooks
+        ↓
+Service interfaces and exports
+        ↓
+In-memory mock adapter
+```
+
+`src/services/index.ts` is the integration boundary. A future backend adapter can implement the existing interfaces and replace the mock exports without moving mock data into pages or rewriting the dashboard UI.
+
+## Backend integration status
+
+Real Minecraft server operations are intentionally not connected yet. The following areas still require backend implementations:
+
+- server lifecycle and status updates
+- live console streaming and command execution
+- player, operator, whitelist, and ban management
+- file browsing, editing, upload, and download
+- plugin and mod operations
+- backup and restore jobs
+- schedule execution
+- bots, activity, logs, and notifications
+- persistent global and per-server settings
+
+Keep API URLs, credentials, and environment-specific configuration outside the frontend source when adding the real adapter.
