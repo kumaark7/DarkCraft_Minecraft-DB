@@ -7,9 +7,9 @@ export function useServers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       setError(null);
       const data = await serverService.getServers();
       setServers(data);
@@ -20,7 +20,11 @@ export function useServers() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    const tid = setInterval(() => { void load(false); }, 2000);
+    return () => clearInterval(tid);
+  }, [load]);
 
   const startServer = useCallback(async (id: string) => {
     await serverService.startServer(id);

@@ -8,11 +8,19 @@ import type { ConsoleEntry, ConsoleSeverity, ServerStats } from '../src/types/in
 import type { JsonStore } from './store.js';
 import type { DashboardEvents } from './events.js';
 import type { ManagedServer } from './types.js';
+import { detectRuntime } from './runtimeDetection.js';
 
 interface Runtime {
   process: ChildProcessWithoutNullStreams;
   startedAt: number;
 }
+
+interface ProcessUsage {
+  cpu: number;
+  memory: number;
+}
+
+type ProcessUsageReader = (pid: number) => Promise<ProcessUsage>;
 
 function severityFor(line: string): ConsoleSeverity {
   if (/\b(ERROR|FATAL|SEVERE)\b/i.test(line)) return 'ERROR';
@@ -25,10 +33,14 @@ function severityFor(line: string): ConsoleSeverity {
 export class ProcessManager {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly history = new Map<string, ConsoleEntry[]>();
+  private readonly metadataConfidence = new Map<string, number>();
+  private readonly usageCache = new Map<string, ProcessUsage>();
+  private readonly diskCache = new Map<string, { bytes: number; timestamp: number }>();
 
   constructor(
     private readonly store: JsonStore,
     private readonly events: DashboardEvents,
+    private readonly readProcessUsage: ProcessUsageReader = (pid) => pidusage(pid),
   ) {}
 
   private record(serverId: string, message: string, source: ConsoleEntry['source'] = 'LIVE'): void {
@@ -43,6 +55,24 @@ export class ProcessManager {
     this.history.set(serverId, entries);
     this.events.emitConsole(serverId, entry);
     void this.updatePlayerPresence(serverId, message);
+    void this.updateRuntimeState(serverId, message);
+  }
+
+  async updateRuntimeState(serverId: string, message: string): Promise<void> {
+    const detected = detectRuntime(message);
+    if (!detected.ready && !detected.software && !detected.javaVersion) return;
+    await this.store.update((state) => {
+      const server = state.servers.find((item) => item.id === serverId);
+      if (!server) return;
+      if (detected.ready && server.status === 'STARTING') server.status = 'ONLINE';
+      if (detected.javaVersion) server.javaVersion = detected.javaVersion;
+      const confidence = detected.softwareConfidence ?? 0;
+      if (detected.software && confidence >= (this.metadataConfidence.get(serverId) ?? 0)) {
+        server.software = detected.software;
+        if (detected.minecraftVersion) server.minecraftVersion = detected.minecraftVersion;
+        this.metadataConfidence.set(serverId, confidence);
+      }
+    });
   }
 
   private async updatePlayerPresence(serverId: string, message: string): Promise<void> {
@@ -92,15 +122,14 @@ export class ProcessManager {
     child.once('spawn', async () => {
       await this.store.update((state) => {
         const target = state.servers.find((item) => item.id === serverId);
-        if (target) {
-          target.status = 'ONLINE';
-          target.pid = child.pid;
-        }
+        if (target) target.pid = child.pid;
       });
     });
     child.once('error', async (error) => {
       this.record(serverId, `Failed to start server: ${error.message}`);
       this.runtimes.delete(serverId);
+      this.metadataConfidence.delete(serverId);
+      this.usageCache.delete(serverId);
       await this.store.update((state) => {
         const target = state.servers.find((item) => item.id === serverId);
         if (target) target.status = 'CRASHED';
@@ -117,6 +146,7 @@ export class ProcessManager {
           target.playerCount = 0;
           target.uptime = 0;
         }
+        state.players[serverId] = (state.players[serverId] ?? []).map((player) => ({ ...player, online: false }));
       });
     });
   }
@@ -181,13 +211,23 @@ export class ProcessManager {
     return bytes;
   }
 
+  private async cachedDirectorySize(serverId: string, directory: string): Promise<number> {
+    const cached = this.diskCache.get(serverId);
+    if (cached && Date.now() - cached.timestamp < 30_000) return cached.bytes;
+    const bytes = await this.directorySize(directory).catch(() => cached?.bytes ?? 0);
+    this.diskCache.set(serverId, { bytes, timestamp: Date.now() });
+    return bytes;
+  }
+
   async stats(serverId: string): Promise<ServerStats | null> {
     const server = this.store.get().servers.find((item) => item.id === serverId);
     if (!server) return null;
     const runtime = this.runtimes.get(serverId);
     const uptime = runtime ? Math.floor((Date.now() - runtime.startedAt) / 1000) : 0;
-    const usage = runtime?.process.pid ? await pidusage(runtime.process.pid).catch(() => null) : null;
-    const disk = await this.directorySize(server.directory).catch(() => 0);
+    const sampledUsage = runtime?.process.pid ? await this.readProcessUsage(runtime.process.pid).catch(() => null) : null;
+    if (sampledUsage) this.usageCache.set(serverId, sampledUsage);
+    const usage = sampledUsage ?? (runtime ? this.usageCache.get(serverId) : undefined);
+    const disk = await this.cachedDirectorySize(serverId, server.directory);
     return {
       serverId,
       cpu: usage?.cpu ?? 0,
@@ -197,13 +237,40 @@ export class ProcessManager {
       diskMax: server.diskMax,
       networkIn: 0,
       networkOut: 0,
-      players: server.playerCount,
+      players: (this.store.get().players[serverId] ?? []).filter((player) => player.online).length,
       maxPlayers: server.maxPlayers,
       uptime,
       tps: runtime ? 20 : 0,
       mspt: runtime ? 0 : 0,
       timestamp: Date.now(),
     };
+  }
+
+  async serverSnapshot(serverId: string): Promise<ManagedServer | null> {
+    const server = this.store.get().servers.find((item) => item.id === serverId);
+    if (!server) return null;
+    const stats = await this.stats(serverId);
+    const running = this.runtimes.has(serverId);
+    const status = !running && ['ONLINE', 'STARTING', 'STOPPING'].includes(server.status) ? 'OFFLINE' : server.status;
+    const playerCount = running
+      ? (this.store.get().players[serverId] ?? []).filter((player) => player.online).length
+      : 0;
+    return {
+      ...server,
+      status,
+      playerCount,
+      cpu: running ? (stats?.cpu ?? 0) : 0,
+      ram: running ? (stats?.ram ?? 0) : 0,
+      disk: stats?.disk ?? server.disk,
+      uptime: running ? (stats?.uptime ?? 0) : 0,
+      pid: running ? server.pid : undefined,
+    };
+  }
+
+  async serverSnapshots(): Promise<ManagedServer[]> {
+    return Promise.all(this.store.get().servers.map((server) => this.serverSnapshot(server.id))).then(
+      (servers) => servers.filter((server): server is ManagedServer => server !== null),
+    );
   }
 
   async shutdown(): Promise<void> {

@@ -118,8 +118,14 @@ export default function DashboardPage() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground text-xs">Network</span>
                   <span className="text-xs font-medium text-foreground flex items-center gap-2">
-                    <span className="flex items-center gap-0.5 text-primary"><ArrowDown className="w-3 h-3" />{formatBytes(hostStats.networkIn * 1024)}/s</span>
-                    <span className="flex items-center gap-0.5 text-accent"><ArrowUp className="w-3 h-3" />{formatBytes(hostStats.networkOut * 1024)}/s</span>
+                    {hostStats.networkIn === null || hostStats.networkOut === null ? (
+                      <span className="text-muted-foreground">Unavailable</span>
+                    ) : (
+                      <>
+                        <span className="flex items-center gap-0.5 text-primary"><ArrowDown className="w-3 h-3" />{formatBytes(hostStats.networkIn * 1024)}/s</span>
+                        <span className="flex items-center gap-0.5 text-accent"><ArrowUp className="w-3 h-3" />{formatBytes(hostStats.networkOut * 1024)}/s</span>
+                      </>
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between">

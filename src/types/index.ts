@@ -66,8 +66,8 @@ export interface HostStats {
   ramUsed: number; // MB
   diskTotal: number; // GB
   diskUsed: number; // GB
-  networkIn: number; // KB/s
-  networkOut: number; // KB/s
+  networkIn: number | null; // KB/s; null when host counters are unavailable
+  networkOut: number | null; // KB/s; null when host counters are unavailable
 }
 
 export interface ServerSettings {

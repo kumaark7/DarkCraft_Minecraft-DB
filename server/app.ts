@@ -43,11 +43,13 @@ import {
 } from './security.js';
 import { JsonStore } from './store.js';
 import type { DashboardState, ManagedServer } from './types.js';
+import { HostMetricsSampler } from './hostMetrics.js';
 
 interface AppContext {
   app: FastifyInstance;
   store: JsonStore;
   processes: ProcessManager;
+  hostMetrics: HostMetricsSampler;
   config: BackendConfig;
 }
 
@@ -197,10 +199,16 @@ async function createBackup(context: AppContext, id: string): Promise<Backup> {
 }
 
 function registerReadRoutes(context: AppContext): void {
-  const { app, store, processes } = context;
+  const { app, store, processes, hostMetrics } = context;
   app.get('/api/v1/health', async () => ok({ status: 'ok', readOnly: context.config.readOnly }));
-  app.get('/api/v1/servers', async () => ok(store.get().servers));
-  app.get('/api/v1/servers/:id', async (request) => ok(serverById(store.get(), params(request).id ?? '')));
+  app.get('/api/v1/servers', async () => ok(await processes.serverSnapshots()));
+  app.get('/api/v1/servers/:id', async (request) => {
+    const id = params(request).id ?? '';
+    assertIdentifier(id, 'server identifier');
+    const server = await processes.serverSnapshot(id);
+    if (!server) throw Object.assign(new Error('Server not found'), { statusCode: 404 });
+    return ok(server);
+  });
   app.get('/api/v1/servers/:id/stats', async (request) => ok(await processes.stats(params(request).id ?? '')));
   app.get('/api/v1/servers/:id/settings', async (request) => ok(store.get().settings[params(request).id ?? ''] ?? null));
   app.get('/api/v1/servers/:id/console', async (request) => ok(processes.getHistory(params(request).id ?? '')));
@@ -229,9 +237,10 @@ function registerReadRoutes(context: AppContext): void {
   app.get('/api/v1/bots/:id', async (request) => ok(store.get().bots.find((item) => item.id === params(request).id) ?? null));
   app.get('/api/v1/settings', async () => ok(store.get().globalSettings));
   app.get('/api/v1/host/stats', async () => {
-    const total = os.totalmem(); const free = os.freemem(); const load = os.loadavg()[0] ?? 0; const cores = Math.max(1, os.cpus().length);
-    const disk = await statfs(context.config.serversRoot); const diskTotal = Number(disk.blocks * disk.bsize) / 1073741824; const diskFree = Number(disk.bavail * disk.bsize) / 1073741824;
-    return ok({ uptime: os.uptime(), cpuModel: os.cpus()[0]?.model ?? 'Unknown', cpuUsage: Math.min(100, (load / cores) * 100), ramTotal: total / 1048576, ramUsed: (total - free) / 1048576, diskTotal, diskUsed: diskTotal - diskFree, networkIn: 0, networkOut: 0 });
+    const total = os.totalmem(); const free = os.freemem();
+    const [disk, network] = await Promise.all([statfs(context.config.serversRoot), hostMetrics.networkRates()]);
+    const diskTotal = Number(disk.blocks * disk.bsize) / 1073741824; const diskFree = Number(disk.bavail * disk.bsize) / 1073741824;
+    return ok({ uptime: os.uptime(), cpuModel: os.cpus()[0]?.model ?? 'Unknown', cpuUsage: hostMetrics.cpuUsage(), ramTotal: total / 1048576, ramUsed: (total - free) / 1048576, diskTotal, diskUsed: diskTotal - diskFree, ...network });
   });
 }
 
@@ -354,10 +363,10 @@ function registerPluginWrites(context: AppContext): void {
 export async function buildApp(config: BackendConfig): Promise<AppContext> {
   await mkdir(config.dataDir, { recursive: true }); await mkdir(config.serversRoot, { recursive: true });
   const store = new JsonStore(path.join(config.dataDir, 'dashboard.json')); await store.load();
-  const events = new DashboardEvents(); const processes = new ProcessManager(store, events);
+  const events = new DashboardEvents(); const processes = new ProcessManager(store, events); const hostMetrics = new HostMetricsSampler();
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 16 * 1024 * 1024 });
   await app.register(multipart, { limits: { fileSize: 512 * 1024 * 1024, files: 1 } }); await app.register(websocket);
-  const context = { app, store, processes, config };
+  const context = { app, store, processes, hostMetrics, config };
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
   const scheduleRunner = new ScheduleRunner(store, (schedule) => runSchedule(context, schedule)); scheduleRunner.start();
