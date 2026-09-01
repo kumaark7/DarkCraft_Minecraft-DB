@@ -71,7 +71,7 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Disk Used"
-            value={hostStats ? `${hostStats.diskUsed} / ${hostStats.diskTotal} GB` : '—'}
+            value={hostStats ? `${hostStats.diskUsed.toFixed(2)} / ${hostStats.diskTotal.toFixed(2)} GB` : '—'}
             icon={<HardDrive className="w-4 h-4" />}
             highlight={hostStats && hostStats.diskUsed / hostStats.diskTotal > 0.85 ? 'red' : undefined}
           />
@@ -104,7 +104,7 @@ export default function DashboardPage() {
                   <span className="text-muted-foreground text-xs">Disk</span>
                   <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
                     <span className="text-foreground text-xs font-medium shrink-0">
-                      {hostStats.diskUsed} / {hostStats.diskTotal} GB
+                      {hostStats.diskUsed.toFixed(2)} / {hostStats.diskTotal.toFixed(2)} GB
                     </span>
                     <ProgressBar value={hostStats.diskUsed} max={hostStats.diskTotal} className="max-w-24" />
                   </div>

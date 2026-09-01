@@ -34,15 +34,32 @@ const TABS = [
 export default function ServerManagementPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { server, loading } = useServer(id!);
+  const { server, loading, reload: loadServer } = useServer(id!);
   const [exportOpen, setExportOpen] = useState(false);
   const [killConfirm, setKillConfirm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteInput, setDeleteInput] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
 
   const isRunning = server?.status === 'ONLINE' || server?.status === 'STARTING';
 
-  const handleStart = () => serverService.startServer(id!).then(() => toast.success('Server starting…'));
+  const handleStart = async () => {
+    if (!id || actionBusy) return;
+    setActionBusy(true);
+    try {
+      console.info('[DarkCraft] Starting server', id);
+      await serverService.startServer(id);
+      toast.success('Server starting…');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await loadServer();
+    } catch (error) {
+      console.error('[DarkCraft] Failed to start server', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to start server');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   const handleStop = () => serverService.stopServer(id!).then(() => toast.success('Server stopping…'));
   const handleRestart = () => serverService.restartServer(id!).then(() => toast.success('Server restarting…'));
   const handleKill = () => { serverService.killServer(id!); setKillConfirm(false); toast.warning('Server killed'); };
@@ -104,8 +121,8 @@ export default function ServerManagementPage() {
             {/* Action buttons */}
             <div className="flex items-center gap-1.5 flex-wrap shrink-0">
               {!isRunning && server.status !== 'STOPPING' && (
-                <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={handleStart}>
-                  <Play className="w-3 h-3" /> Start
+                <Button type="button" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => void handleStart()} disabled={actionBusy}>
+                  <Play className="w-3 h-3" /> {actionBusy ? 'Starting…' : 'Start'}
                 </Button>
               )}
               {isRunning && (
