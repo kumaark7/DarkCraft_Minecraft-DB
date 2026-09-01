@@ -92,6 +92,7 @@ server/
   app.ts         REST/WebSocket routes and domain operations
   processManager.ts  Safe Minecraft process and console lifecycle
   security.ts    Root sandbox, traversal, symlink, and read-only policy
+  software*.ts   Official software catalogs, cache, download validation, and installers
   store.ts       Atomic local metadata persistence
 ```
 
@@ -114,6 +115,8 @@ Selected mock or real adapter
 ## Backend
 
 The backend is included and covers the complete service interface. It stores runtime metadata under `.data/`, keeps authentication and hashed session data under ignored `.data/auth/`, confines Minecraft files to `MINECRAFT_SERVERS_ROOT`, and supports an enforced `DASHBOARD_READ_ONLY=true` mode.
+
+The Create Server wizard retrieves Vanilla, Paper, Purpur, Fabric, Forge, and NeoForge versions from their official metadata services. Metadata is cached under ignored `.data/catalog/`; **Refresh Versions** clears and rebuilds that cache. Server artifacts are downloaded only into the new server's `.data/servers/` directory, checked against published size/checksum data when available, and validated as JAR archives. Forge and NeoForge installers run in server-install mode, while Fabric uses its official executable server launcher. DarkCraft records compatible update availability but never upgrades an existing server automatically.
 
 For production, build with `VITE_DATA_SOURCE=real`, keep the backend bound to `127.0.0.1:8787`, and proxy both HTTP and WebSocket traffic through Nginx. Set `DASHBOARD_ALLOWED_ORIGINS=https://darkcraft.projectdarkhope.xyz` and leave `DASHBOARD_SECURE_COOKIES=true`. Nginx must preserve the `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` headers and forward WebSocket `Upgrade` and `Connection` headers.
 

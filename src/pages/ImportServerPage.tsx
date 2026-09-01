@@ -142,9 +142,11 @@ export default function ImportServerPage() {
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Detected Configuration</h2>
               <div className="space-y-0 divide-y divide-border/50">
                 {[
-                  { label: 'Server Software', value: inspection.detectedSoftware, icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" /> },
-                  { label: 'Minecraft Version', value: inspection.detectedVersion, icon: <Globe className="w-3.5 h-3.5 text-muted-foreground" /> },
-                  { label: 'Server JAR', value: inspection.detectedJar, icon: <Package className="w-3.5 h-3.5 text-muted-foreground" /> },
+                  { label: 'Server Software', value: inspection.detectedSoftware ?? 'Unknown', icon: <Settings className="w-3.5 h-3.5 text-muted-foreground" /> },
+                  { label: 'Minecraft Version', value: inspection.detectedVersion ?? 'Unknown', icon: <Globe className="w-3.5 h-3.5 text-muted-foreground" /> },
+                  { label: 'Build / Loader', value: inspection.detectedBuild ?? 'Unknown', icon: <Package className="w-3.5 h-3.5 text-muted-foreground" /> },
+                  { label: 'Server JAR', value: inspection.detectedJar ?? 'Unknown', icon: <Package className="w-3.5 h-3.5 text-muted-foreground" /> },
+                  { label: 'Active World', value: inspection.activeWorld ?? 'Unknown', icon: <Globe className="w-3.5 h-3.5 text-muted-foreground" /> },
                   { label: 'Worlds', value: inspection.worlds.join(', '), icon: <Globe className="w-3.5 h-3.5 text-muted-foreground" /> },
                   { label: 'Plugins', value: `${inspection.pluginCount} detected`, icon: <Package className="w-3.5 h-3.5 text-muted-foreground" /> },
                   { label: 'Mods', value: inspection.modCount > 0 ? `${inspection.modCount} detected` : 'None', icon: <Package className="w-3.5 h-3.5 text-muted-foreground" /> },

@@ -7,11 +7,11 @@ import type {
   ConsoleEntry,
   ServerFile, Plugin, Mod, Backup,
   Schedule, AppNotification,
-  Bot, GlobalSettings, ImportInspection,
+  Bot, GlobalSettings, ImportInspection, InstallableServerSoftware, SoftwareCatalog,
 } from '@/types';
 import type {
   IServerService, IConsoleService, IPlayerService, IFileService,
-  IPluginService, IBackupService, IScheduleService, IGlobalService,
+  IPluginService, IBackupService, IScheduleService, IGlobalService, ISoftwareCatalogService,
 } from './interfaces';
 import {
   MOCK_SERVERS, MOCK_SERVER_STATS, MOCK_SERVER_SETTINGS,
@@ -125,22 +125,23 @@ export const serverService: IServerService = {
       id: `server-${Date.now()}`,
       name: config.serverName ?? 'New Server',
       status: 'OFFLINE',
-      software: (config as Server).software ?? 'Paper',
-      minecraftVersion: (config as Server).minecraftVersion ?? '1.21.1',
+      software: config.serverType,
+      minecraftVersion: config.minecraftVersion,
       javaVersion: 'Java 21',
       ip: '0.0.0.0',
-      port: config.serverPort ?? 25565,
+      port: config.port,
       playerCount: 0,
       maxPlayers: config.maxPlayers ?? 20,
       cpu: 0,
       ram: 0,
-      ramMax: 4096,
+      ramMax: config.ram,
       disk: 0,
       diskMax: 50000,
       uptime: 0,
       directory: `/opt/minecraft/${(config.serverName ?? 'new-server').toLowerCase().replace(/\s+/g, '-')}`,
       startupCommand: 'java -Xms1G -Xmx4G -jar server.jar --nogui',
       createdAt: new Date().toISOString(),
+      softwareBuild: config.softwareBuild,
     };
     _servers = [..._servers, newServer];
     return newServer;
@@ -159,6 +160,7 @@ export const serverService: IServerService = {
       detectedVersion: '1.21.1',
       detectedSoftware: 'Paper',
       detectedJar: 'paper-1.21.1-196.jar',
+      activeWorld: 'world',
       worlds: ['world', 'world_nether', 'world_the_end'],
       pluginCount: 8,
       modCount: 0,
@@ -474,4 +476,16 @@ export const globalService: IGlobalService = {
     await delay(400);
     _globalSettings = { ..._globalSettings, ...settings };
   },
+};
+
+const MOCK_SOFTWARE: InstallableServerSoftware[] = ['Vanilla', 'Paper', 'Purpur', 'Fabric', 'Forge', 'NeoForge'];
+
+export const softwareCatalogService: ISoftwareCatalogService = {
+  async getCatalog() {
+    await delay(200);
+    const versions = [...new Set(MOCK_SERVERS.map((server) => server.minecraftVersion))].map((id) => ({ id, stable: true }));
+    return { refreshedAt: new Date().toISOString(), providers: MOCK_SOFTWARE.map((software) => ({ software, versions })) } satisfies SoftwareCatalog;
+  },
+  async getBuilds() { await delay(100); return [{ id: 'mock-latest', label: 'Latest', stable: true }]; },
+  async refresh() { return this.getCatalog(); },
 };

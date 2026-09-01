@@ -24,6 +24,10 @@ import type {
   GlobalSettings,
   ImportInspection,
   ExportProgress,
+  CreateServerConfig,
+  InstallableServerSoftware,
+  SoftwareBuild,
+  SoftwareCatalog,
 } from '@/types';
 
 // Server service
@@ -35,13 +39,19 @@ export interface IServerService {
   stopServer(id: string): Promise<void>;
   restartServer(id: string): Promise<void>;
   killServer(id: string): Promise<void>;
-  createServer(config: Partial<Server> & Partial<ServerSettings>): Promise<Server>;
+  createServer(config: CreateServerConfig): Promise<Server>;
   deleteServer(id: string, confirmName: string): Promise<void>;
   importServer(file: File): Promise<{ inspectionId: string; inspection: ImportInspection }>;
   confirmImport(inspectionId: string, serverName: string): Promise<Server>;
   exportServer(id: string, onProgress: (p: ExportProgress) => void): Promise<string>;
   getServerSettings(id: string): Promise<ServerSettings | null>;
   updateServerSettings(id: string, settings: Partial<ServerSettings>): Promise<void>;
+}
+
+export interface ISoftwareCatalogService {
+  getCatalog(): Promise<SoftwareCatalog>;
+  getBuilds(software: InstallableServerSoftware, minecraftVersion: string): Promise<SoftwareBuild[]>;
+  refresh(software?: InstallableServerSoftware, minecraftVersion?: string): Promise<SoftwareCatalog>;
 }
 
 // Console service

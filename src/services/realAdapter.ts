@@ -1,11 +1,12 @@
 import type {
   ActivityEvent, AppNotification, Backup, BannedIP, Bot, ConsoleEntry, GlobalSettings, HostStats,
-  ImportInspection, LogEntry, Mod, Player, Plugin, Schedule, Server, ServerFile, ServerSettings, ServerStats,
+  ImportInspection, InstallableServerSoftware, LogEntry, Mod, Player, Plugin, Schedule, Server, ServerFile,
+  ServerSettings, ServerStats, SoftwareBuild, SoftwareCatalog,
 } from '@/types';
 import type { ApiClient } from './apiClient';
 import { AUTH_UNAUTHORIZED_EVENT, createApiClient } from './apiClient';
 import { resolveServiceConfig } from './config';
-import type { IBackupService, IConsoleService, IFileService, IGlobalService, IPlayerService, IPluginService, IScheduleService, IServerService } from './interfaces';
+import type { IBackupService, IConsoleService, IFileService, IGlobalService, IPlayerService, IPluginService, IScheduleService, IServerService, ISoftwareCatalogService } from './interfaces';
 import { assertServerId, normalizeServerPath, safeServerPath } from './security';
 
 export function createRealServices(client: ApiClient) {
@@ -74,7 +75,12 @@ export function createRealServices(client: ApiClient) {
   const globalService: IGlobalService = {
     getActivity: (filters) => client.get<ActivityEvent[]>('/activity', filters), getLogs: (filters) => client.get<LogEntry[]>('/logs', filters), getHostStats: () => client.get<HostStats>('/host/stats'), getNotifications: () => client.get<AppNotification[]>('/notifications'), markNotificationRead: (id) => client.post(`/notifications/${encodeURIComponent(assertServerId(id))}/read`), markAllNotificationsRead: () => client.post('/notifications/read-all'), getBots: () => client.get<Bot[]>('/bots'), getBot: (id) => client.get<Bot | null>(`/bots/${encodeURIComponent(assertServerId(id))}`), startBot: (id) => client.post(`/bots/${encodeURIComponent(assertServerId(id))}/start`), stopBot: (id) => client.post(`/bots/${encodeURIComponent(assertServerId(id))}/stop`), getGlobalSettings: () => client.get<GlobalSettings>('/settings'), updateGlobalSettings: (settings) => client.patch('/settings', settings),
   };
-  return { serverService, consoleService, playerService, fileService, pluginService, backupService, scheduleService, globalService };
+  const softwareCatalogService: ISoftwareCatalogService = {
+    getCatalog: () => client.get<SoftwareCatalog>('/software/catalog'),
+    getBuilds: (software, minecraftVersion) => client.get<SoftwareBuild[]>(`/software/catalog/${encodeURIComponent(software)}/${encodeURIComponent(minecraftVersion)}/builds`),
+    refresh: (software?: InstallableServerSoftware, minecraftVersion?: string) => client.post<SoftwareCatalog>('/software/catalog/refresh', { software, minecraftVersion }),
+  };
+  return { serverService, consoleService, playerService, fileService, pluginService, backupService, scheduleService, globalService, softwareCatalogService };
 }
 
 const config = resolveServiceConfig();

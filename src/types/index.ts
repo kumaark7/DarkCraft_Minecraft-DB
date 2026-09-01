@@ -5,6 +5,7 @@
 export type ServerStatus = 'ONLINE' | 'OFFLINE' | 'STARTING' | 'STOPPING' | 'CRASHED';
 
 export type ServerSoftware =
+  | 'Unknown'
   | 'Vanilla'
   | 'Paper'
   | 'Purpur'
@@ -13,6 +14,46 @@ export type ServerSoftware =
   | 'Fabric'
   | 'Forge'
   | 'NeoForge';
+
+export type InstallableServerSoftware =
+  | 'Vanilla'
+  | 'Paper'
+  | 'Purpur'
+  | 'Fabric'
+  | 'Forge'
+  | 'NeoForge';
+
+export interface SoftwareCatalogVersion {
+  id: string;
+  stable: boolean;
+}
+
+export interface SoftwareCatalogProvider {
+  software: InstallableServerSoftware;
+  versions: SoftwareCatalogVersion[];
+  error?: string;
+}
+
+export interface SoftwareCatalog {
+  refreshedAt: string;
+  providers: SoftwareCatalogProvider[];
+}
+
+export interface SoftwareBuild {
+  id: string;
+  label: string;
+  stable: boolean;
+}
+
+export interface CreateServerConfig extends Partial<ServerSettings> {
+  serverName: string;
+  serverType: InstallableServerSoftware;
+  minecraftVersion: string;
+  softwareBuild: string;
+  javaVersion: string;
+  ram: number;
+  port: number;
+}
 
 export type GameMode = 'survival' | 'creative' | 'adventure' | 'spectator';
 export type Difficulty = 'peaceful' | 'easy' | 'normal' | 'hard';
@@ -39,6 +80,8 @@ export interface Server {
   startupCommand: string;
   iconUrl?: string;
   createdAt: string;
+  softwareBuild?: string;
+  availableBuild?: string;
 }
 
 export interface ServerStats {
@@ -336,6 +379,8 @@ export interface ImportInspection {
   detectedVersion?: string;
   detectedSoftware?: ServerSoftware;
   detectedJar?: string;
+  detectedBuild?: string;
+  activeWorld?: string;
   worlds: string[];
   pluginCount: number;
   modCount: number;

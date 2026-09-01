@@ -49,6 +49,7 @@ All JSON responses use `{ "data": ... }`; failures use `{ "error": { "code", "me
 | Authentication | `GET /auth/status` | setup start/complete, login, logout |
 | System | `GET /health`, `/host/stats`, `/activity`, `/logs` | — |
 | Servers | `GET /servers`, `/servers/:id`, `/:id/stats` | create, delete, start, stop, restart, kill, import, export |
+| Software catalog | `GET /software/catalog`, `/software/catalog/:software/:minecraftVersion/builds` | refresh official metadata cache |
 | Console | `GET /servers/:id/console`, WebSocket `/console/stream` | send command, clear history |
 | Players | `GET /servers/:id/players`, `/banned-ips` | kick, ban, pardon, op, deop, whitelist, IP pardon |
 | Files | list, content, download | save, upload, delete, create, rename, move, copy, ZIP, extract |

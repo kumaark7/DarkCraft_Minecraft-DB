@@ -24,6 +24,7 @@ import type {
   ActivityEvent,
   Backup,
   Bot,
+  ImportInspection,
   Player,
   Schedule,
   ServerFile,
@@ -45,6 +46,10 @@ import { JsonStore } from './store.js';
 import type { DashboardState, ManagedServer } from './types.js';
 import { HostMetricsSampler } from './hostMetrics.js';
 import { installAuthentication, type AuthContext } from './authHttp.js';
+import { inspectServerArchive } from './importDetection.js';
+import { SoftwareCatalogService } from './softwareCatalog.js';
+import { installServerSoftware, type InstallerRunner } from './serverInstaller.js';
+import type { InstallableServerSoftware } from '../src/types/index.js';
 
 interface AppContext {
   app: FastifyInstance;
@@ -53,19 +58,14 @@ interface AppContext {
   hostMetrics: HostMetricsSampler;
   auth: AuthContext;
   config: BackendConfig;
+  catalog: SoftwareCatalogService;
+  installerFetcher?: typeof fetch;
+  installerRunner?: InstallerRunner;
 }
 
 interface ImportCandidate {
   buffer: Buffer;
-  inspection: {
-    detectedName: string;
-    worlds: string[];
-    pluginCount: number;
-    modCount: number;
-    archiveSize: number;
-    hasServerProperties: boolean;
-    configFiles: string[];
-  };
+  inspection: ImportInspection;
 }
 
 const imports = new Map<string, ImportCandidate>();
@@ -98,6 +98,35 @@ async function serverPath(context: AppContext, id: string, requested = '/'): Pro
 
 function writable(config: BackendConfig): void {
   assertWritable(config.readOnly);
+}
+
+const INSTALLABLE_SOFTWARE = new Set<InstallableServerSoftware>(['Vanilla', 'Paper', 'Purpur', 'Fabric', 'Forge', 'NeoForge']);
+
+function installableSoftware(value: unknown): InstallableServerSoftware {
+  if (typeof value !== 'string' || !INSTALLABLE_SOFTWARE.has(value as InstallableServerSoftware)) {
+    throw Object.assign(new Error('Unsupported server software'), { statusCode: 400 });
+  }
+  return value as InstallableServerSoftware;
+}
+
+function requiredString(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !value.trim()) throw Object.assign(new Error(`${label} is required`), { statusCode: 400 });
+  return value.trim();
+}
+
+function boundedInteger(value: unknown, label: string, minimum: number, maximum: number): number {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < minimum || number > maximum) throw Object.assign(new Error(`${label} must be between ${minimum} and ${maximum}`), { statusCode: 400 });
+  return number;
+}
+
+async function withAvailableBuild(context: AppContext, server: ManagedServer): Promise<ManagedServer> {
+  if (!server.softwareBuild || !INSTALLABLE_SOFTWARE.has(server.software as InstallableServerSoftware)) return server;
+  try {
+    const builds = await context.catalog.builds(server.software as InstallableServerSoftware, server.minecraftVersion);
+    const latest = builds.find((build) => build.stable) ?? builds[0];
+    return latest && latest.id !== server.softwareBuild ? { ...server, availableBuild: latest.id } : server;
+  } catch { return server; }
 }
 
 async function recordActivity(store: JsonStore, event: Omit<ActivityEvent, 'id' | 'timestamp'>): Promise<void> {
@@ -203,13 +232,18 @@ async function createBackup(context: AppContext, id: string): Promise<Backup> {
 function registerReadRoutes(context: AppContext): void {
   const { app, store, processes, hostMetrics } = context;
   app.get('/api/v1/health', async () => ok({ status: 'ok', readOnly: context.config.readOnly }));
-  app.get('/api/v1/servers', async () => ok(await processes.serverSnapshots()));
+  app.get('/api/v1/software/catalog', async () => ok(await context.catalog.catalog()));
+  app.get('/api/v1/software/catalog/:software/:minecraftVersion/builds', async (request) => {
+    const values = params(request);
+    return ok(await context.catalog.builds(installableSoftware(values.software), requiredString(values.minecraftVersion, 'Minecraft version')));
+  });
+  app.get('/api/v1/servers', async () => ok(await Promise.all((await processes.serverSnapshots()).map((server) => withAvailableBuild(context, server)))));
   app.get('/api/v1/servers/:id', async (request) => {
     const id = params(request).id ?? '';
     assertIdentifier(id, 'server identifier');
     const server = await processes.serverSnapshot(id);
     if (!server) throw Object.assign(new Error('Server not found'), { statusCode: 404 });
-    return ok(server);
+    return ok(await withAvailableBuild(context, server));
   });
   app.get('/api/v1/servers/:id/stats', async (request) => ok(await processes.stats(params(request).id ?? '')));
   app.get('/api/v1/servers/:id/settings', async (request) => ok(store.get().settings[params(request).id ?? ''] ?? null));
@@ -258,16 +292,27 @@ async function jars(context: AppContext, id: string, directory: string) {
 function registerWriteRoutes(context: AppContext): void {
   const { app, store, processes, config } = context;
   const guard = () => writable(config);
+  app.post('/api/v1/software/catalog/refresh', async (request) => {
+    guard(); const input = body<{ software?: unknown; minecraftVersion?: unknown }>(request);
+    const software = input.software === undefined ? undefined : installableSoftware(input.software);
+    const minecraftVersion = input.minecraftVersion === undefined ? undefined : requiredString(input.minecraftVersion, 'Minecraft version');
+    return ok(await context.catalog.refresh(software, minecraftVersion));
+  });
   app.post('/api/v1/servers/:id/start', async (request) => { guard(); await processes.start(params(request).id ?? ''); return ok(null); });
   app.post('/api/v1/servers/:id/stop', async (request) => { guard(); await processes.stop(params(request).id ?? ''); return ok(null); });
   app.post('/api/v1/servers/:id/restart', async (request) => { guard(); await processes.restart(params(request).id ?? ''); return ok(null); });
   app.post('/api/v1/servers/:id/kill', async (request) => { guard(); await processes.kill(params(request).id ?? ''); return ok(null); });
   app.post('/api/v1/servers', async (request, reply) => {
     guard(); const input = body<Record<string, unknown>>(request); const id = randomUUID();
-    const name = String(input.serverName ?? 'Minecraft Server').trim(); assertFileName(name);
+    const name = requiredString(input.serverName, 'Server name'); assertFileName(name);
+    const software = installableSoftware(input.serverType); const minecraftVersion = requiredString(input.minecraftVersion, 'Minecraft version');
+    const softwareBuild = requiredString(input.softwareBuild, 'Build or loader version');
+    const ram = boundedInteger(input.ram, 'RAM', 512, 65_536); const port = boundedInteger(input.port, 'Port', 1, 65_535); const maxPlayers = boundedInteger(input.maxPlayers ?? 20, 'Max players', 1, 10_000);
     const directory = await resolveInside(config.serversRoot, `/${id}`); await mkdir(directory, { recursive: true });
-    const ram = Number(input.ram ?? 4096); const port = Number(input.port ?? 25565); const maxPlayers = Number(input.maxPlayers ?? 20);
-    const server: ManagedServer = { id, name, status: 'OFFLINE', software: String(input.serverType ?? 'Paper') as ManagedServer['software'], minecraftVersion: String(input.minecraftVersion ?? '1.21.4'), javaVersion: String(input.javaVersion ?? 'Java 21'), ip: '0.0.0.0', port, playerCount: 0, maxPlayers, cpu: 0, ram: 0, ramMax: ram, disk: 0, diskMax: 0, uptime: 0, directory, startupCommand: `java -Xms512M -Xmx${ram}M -jar server.jar nogui`, startupExecutable: 'java', startupArgs: [`-Xms512M`, `-Xmx${ram}M`, '-jar', 'server.jar', 'nogui'], createdAt: new Date().toISOString() };
+    let runtime;
+    try { runtime = await installServerSoftware(context.catalog, { software, minecraftVersion, build: softwareBuild, ramMb: ram }, directory, { fetcher: context.installerFetcher, runner: context.installerRunner }); }
+    catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
+    const server: ManagedServer = { id, name, status: 'OFFLINE', software, minecraftVersion, softwareBuild, javaVersion: String(input.javaVersion ?? 'Java'), ip: '0.0.0.0', port, playerCount: 0, maxPlayers, cpu: 0, ram: 0, ramMax: ram, disk: 0, diskMax: 0, uptime: 0, directory, startupCommand: runtime.startupCommand, startupExecutable: runtime.startupExecutable, startupArgs: runtime.startupArgs, createdAt: new Date().toISOString() };
     const settings: ServerSettings = { serverId: id, serverName: name, motd: name, serverPort: port, maxPlayers, gamemode: String(input.gamemode ?? 'survival') as ServerSettings['gamemode'], difficulty: String(input.difficulty ?? 'normal') as ServerSettings['difficulty'], crackedMode: Boolean(input.crackedMode), whitelist: Boolean(input.whitelist), allowFlight: Boolean(input.allowFlight), pvp: input.pvp !== false, commandBlocks: Boolean(input.commandBlocks), hardcore: false, spawnAnimals: true, spawnMonsters: true, spawnNpcs: true, spawnProtection: 16, viewDistance: Number(input.viewDistance ?? 10), simulationDistance: Number(input.simulationDistance ?? 10), rawProperties: {} };
     await writeFile(path.join(directory, 'server.properties'), properties(settings)); await writeFile(path.join(directory, 'eula.txt'), 'eula=false\n');
     await store.update((state) => { state.servers.push(server); state.settings[id] = settings; state.players[id] = []; state.backups[id] = []; state.schedules[id] = []; });
@@ -348,8 +393,62 @@ async function setBotStatus(store: JsonStore, id: string, status: Bot['status'])
 
 function registerImportsAndExports(context: AppContext): void {
   const { app, store, config } = context;
-  app.post('/api/v1/imports/inspect', async (request) => { writable(config); const part = await request.file(); if (!part) throw Object.assign(new Error('ZIP file is required'), { statusCode: 400 }); const buffer = await part.toBuffer(); const zip = new AdmZip(buffer); validateArchive(zip); const names = zip.getEntries().map((entry) => entry.entryName); const inspection = { detectedName: part.filename.replace(/\.zip$/i, ''), worlds: names.filter((name) => /(^|\/)level\.dat$/i.test(name)).map((name) => path.posix.dirname(name)), pluginCount: names.filter((name) => /(^|\/)plugins\/[^/]+\.jar$/i.test(name)).length, modCount: names.filter((name) => /(^|\/)mods\/[^/]+\.jar$/i.test(name)).length, archiveSize: buffer.length, hasServerProperties: names.some((name) => /(^|\/)server\.properties$/i.test(name)), configFiles: names.filter((name) => /\.(json|ya?ml|properties|toml)$/i.test(name)).slice(0, 100) }; const inspectionId = randomUUID(); imports.set(inspectionId, { buffer, inspection }); return ok({ inspectionId, inspection }); });
-  app.post('/api/v1/imports/:inspectionId/confirm', async (request, reply) => { writable(config); const inspectionId = params(request).inspectionId ?? ''; const candidate = imports.get(inspectionId); if (!candidate) throw Object.assign(new Error('Import inspection expired'), { statusCode: 404 }); const name = body<{ serverName: string }>(request).serverName.trim(); assertFileName(name); const id = randomUUID(); const directory = await resolveInside(config.serversRoot, `/${id}`); await mkdir(directory, { recursive: true }); const zip = new AdmZip(candidate.buffer); for (const entry of zip.getEntries()) { const output = await resolveInside(directory, `/${assertSafeArchiveEntry(entry.entryName)}`); if (entry.isDirectory) await mkdir(output, { recursive: true }); else { await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, entry.getData(), { flag: 'wx' }); } } const jarsFound = (await readdir(directory)).filter((item) => item.endsWith('.jar')); const jar = jarsFound[0] ?? 'server.jar'; const server: ManagedServer = { id, name, status: 'OFFLINE', software: 'Paper', minecraftVersion: 'unknown', javaVersion: 'Java', ip: '0.0.0.0', port: 25565, playerCount: 0, maxPlayers: 20, cpu: 0, ram: 0, ramMax: 4096, disk: 0, diskMax: 0, uptime: 0, directory, startupCommand: `java -Xms512M -Xmx4096M -jar ${jar} nogui`, startupExecutable: 'java', startupArgs: ['-Xms512M', '-Xmx4096M', '-jar', jar, 'nogui'], createdAt: new Date().toISOString() }; await store.update((state) => { state.servers.push(server); state.settings[id] = defaultServerSettings(id, name); state.players[id] = []; state.backups[id] = []; state.schedules[id] = []; }); imports.delete(inspectionId); reply.code(201); return ok(server); });
+  app.post('/api/v1/imports/inspect', async (request) => {
+    writable(config);
+    const part = await request.file();
+    if (!part) throw Object.assign(new Error('ZIP file is required'), { statusCode: 400 });
+    const buffer = await part.toBuffer();
+    const zip = new AdmZip(buffer);
+    validateArchive(zip);
+    const inspection = inspectServerArchive(zip, part.filename, buffer.length);
+    const inspectionId = randomUUID();
+    imports.set(inspectionId, { buffer, inspection });
+    return ok({ inspectionId, inspection });
+  });
+  app.post('/api/v1/imports/:inspectionId/confirm', async (request, reply) => {
+    writable(config);
+    const inspectionId = params(request).inspectionId ?? '';
+    const candidate = imports.get(inspectionId);
+    if (!candidate) throw Object.assign(new Error('Import inspection expired'), { statusCode: 404 });
+    const name = body<{ serverName: string }>(request).serverName.trim();
+    assertFileName(name);
+    const jar = candidate.inspection.detectedJar;
+    if (!jar) throw Object.assign(new Error('Server JAR could not be detected; manual selection is required'), { statusCode: 400 });
+    const zip = new AdmZip(candidate.buffer);
+    const jarEntry = zip.getEntries().find((entry) => !entry.isDirectory && entry.entryName === jar);
+    if (!jarEntry) throw Object.assign(new Error('Detected server JAR is missing from the archive'), { statusCode: 400 });
+
+    const id = randomUUID();
+    const directory = await resolveInside(config.serversRoot, `/${id}`);
+    await mkdir(directory, { recursive: true });
+    try {
+      for (const entry of zip.getEntries()) {
+        const output = await resolveInside(directory, `/${assertSafeArchiveEntry(entry.entryName)}`);
+        if (entry.isDirectory) await mkdir(output, { recursive: true });
+        else { await mkdir(path.dirname(output), { recursive: true }); await writeFile(output, entry.getData(), { flag: 'wx' }); }
+      }
+      const displayedJar = /\s/.test(jar) ? `"${jar}"` : jar;
+      const server: ManagedServer = {
+        id, name, status: 'OFFLINE', software: candidate.inspection.detectedSoftware ?? 'Unknown',
+        minecraftVersion: candidate.inspection.detectedVersion ?? 'unknown', softwareBuild: candidate.inspection.detectedBuild, javaVersion: 'Java',
+        ip: '0.0.0.0', port: 25565, playerCount: 0, maxPlayers: 20, cpu: 0, ram: 0,
+        ramMax: 4096, disk: 0, diskMax: 0, uptime: 0, directory,
+        startupCommand: `java -Xms512M -Xmx4096M -jar ${displayedJar} nogui`,
+        startupExecutable: 'java', startupArgs: ['-Xms512M', '-Xmx4096M', '-jar', jar, 'nogui'],
+        createdAt: new Date().toISOString(),
+      };
+      await store.update((state) => {
+        state.servers.push(server); state.settings[id] = defaultServerSettings(id, name);
+        state.players[id] = []; state.backups[id] = []; state.schedules[id] = [];
+      });
+      imports.delete(inspectionId);
+      reply.code(201);
+      return ok(server);
+    } catch (error) {
+      await rm(directory, { recursive: true, force: true });
+      throw error;
+    }
+  });
   app.get('/api/v1/servers/:id/export', async (request, reply) => { const id = params(request).id ?? ''; const server = serverById(store.get(), id); const buffer = zipDirectory(await serverPath(context, id, '/')); reply.header('Content-Type', 'application/zip'); reply.header('Content-Disposition', `attachment; filename="${server.name.replace(/[^A-Za-z0-9._-]/g, '-')}.zip"`); return reply.send(buffer); });
 }
 
@@ -362,14 +461,24 @@ function registerPluginWrites(context: AppContext): void {
   app.post('/api/v1/servers/:id/plugins/:pluginId/toggle', async (request) => { writable(config); const p = params(request); const enabled = body<{ enabled: boolean }>(request).enabled; const file = assertFileName(p.pluginId ?? ''); const current = await serverPath(context, p.id ?? '', `/plugins/${file}`); const desired = enabled ? file.replace(/\.disabled$/, '') : file.endsWith('.disabled') ? file : `${file}.disabled`; await rename(current, await serverPath(context, p.id ?? '', `/plugins/${desired}`)); return ok(null); });
 }
 
-export async function buildApp(config: BackendConfig, authOptions: { now?: () => number; sessionTtlMs?: number; lockoutThreshold?: number } = {}): Promise<AppContext> {
+interface BuildAppOptions {
+  now?: () => number;
+  sessionTtlMs?: number;
+  lockoutThreshold?: number;
+  catalogFetcher?: typeof fetch;
+  installerFetcher?: typeof fetch;
+  installerRunner?: InstallerRunner;
+}
+
+export async function buildApp(config: BackendConfig, options: BuildAppOptions = {}): Promise<AppContext> {
   await mkdir(config.dataDir, { recursive: true }); await mkdir(config.serversRoot, { recursive: true });
   const store = new JsonStore(path.join(config.dataDir, 'dashboard.json')); await store.load();
   const events = new DashboardEvents(); const processes = new ProcessManager(store, events); const hostMetrics = new HostMetricsSampler();
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 16 * 1024 * 1024, trustProxy: true });
   await app.register(multipart, { limits: { fileSize: 512 * 1024 * 1024, files: 1 } }); await app.register(websocket);
-  const auth = await installAuthentication(app, config, authOptions);
-  const context = { app, store, processes, hostMetrics, auth, config };
+  const auth = await installAuthentication(app, config, { now: options.now, sessionTtlMs: options.sessionTtlMs, lockoutThreshold: options.lockoutThreshold });
+  const catalog = new SoftwareCatalogService(path.join(config.dataDir, 'catalog', 'metadata.json'), options.catalogFetcher, options.now); await catalog.load();
+  const context = { app, store, processes, hostMetrics, auth, config, catalog, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner };
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
   const scheduleRunner = new ScheduleRunner(store, (schedule) => runSchedule(context, schedule)); scheduleRunner.start();
