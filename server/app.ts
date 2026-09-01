@@ -44,12 +44,14 @@ import {
 import { JsonStore } from './store.js';
 import type { DashboardState, ManagedServer } from './types.js';
 import { HostMetricsSampler } from './hostMetrics.js';
+import { installAuthentication, type AuthContext } from './authHttp.js';
 
 interface AppContext {
   app: FastifyInstance;
   store: JsonStore;
   processes: ProcessManager;
   hostMetrics: HostMetricsSampler;
+  auth: AuthContext;
   config: BackendConfig;
 }
 
@@ -360,17 +362,27 @@ function registerPluginWrites(context: AppContext): void {
   app.post('/api/v1/servers/:id/plugins/:pluginId/toggle', async (request) => { writable(config); const p = params(request); const enabled = body<{ enabled: boolean }>(request).enabled; const file = assertFileName(p.pluginId ?? ''); const current = await serverPath(context, p.id ?? '', `/plugins/${file}`); const desired = enabled ? file.replace(/\.disabled$/, '') : file.endsWith('.disabled') ? file : `${file}.disabled`; await rename(current, await serverPath(context, p.id ?? '', `/plugins/${desired}`)); return ok(null); });
 }
 
-export async function buildApp(config: BackendConfig): Promise<AppContext> {
+export async function buildApp(config: BackendConfig, authOptions: { now?: () => number; sessionTtlMs?: number; lockoutThreshold?: number } = {}): Promise<AppContext> {
   await mkdir(config.dataDir, { recursive: true }); await mkdir(config.serversRoot, { recursive: true });
   const store = new JsonStore(path.join(config.dataDir, 'dashboard.json')); await store.load();
   const events = new DashboardEvents(); const processes = new ProcessManager(store, events); const hostMetrics = new HostMetricsSampler();
-  const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 16 * 1024 * 1024 });
+  const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 16 * 1024 * 1024, trustProxy: true });
   await app.register(multipart, { limits: { fileSize: 512 * 1024 * 1024, files: 1 } }); await app.register(websocket);
-  const context = { app, store, processes, hostMetrics, config };
+  const auth = await installAuthentication(app, config, authOptions);
+  const context = { app, store, processes, hostMetrics, auth, config };
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
   const scheduleRunner = new ScheduleRunner(store, (schedule) => runSchedule(context, schedule)); scheduleRunner.start();
-  app.get('/api/v1/servers/:id/console/stream', { websocket: true }, (socket, request) => { const id = params(request).id ?? ''; assertIdentifier(id); const unsubscribe = events.onConsole(id, (entry) => socket.send(JSON.stringify(entry))); socket.on('close', unsubscribe); });
+  app.get('/api/v1/servers/:id/console/stream', { websocket: true }, (socket, request) => {
+    const id = params(request).id ?? ''; assertIdentifier(id);
+    const session = auth.getRequestAuth(request);
+    if (!session) { socket.close(4401, 'Authentication required'); return; }
+    const unsubscribeConsole = events.onConsole(id, (entry) => socket.send(JSON.stringify(entry)));
+    const closeUnauthorized = () => socket.close(4401, 'Session expired');
+    const expiryTimer = setTimeout(closeUnauthorized, Math.max(0, session.expiresAt - Date.now()));
+    const unsubscribeSession = auth.service.onSessionInvalidated(session.sessionToken, closeUnauthorized);
+    socket.on('close', () => { clearTimeout(expiryTimer); unsubscribeSession(); unsubscribeConsole(); });
+  });
   if (existsSync(config.frontendDist)) { await app.register(fastifyStatic, { root: config.frontendDist, wildcard: false }); app.setNotFoundHandler((request, reply) => request.url.startsWith('/api/') ? reply.code(404).send({ error: { code: 'NotFound', message: 'Endpoint not found' } }) : reply.sendFile('index.html')); }
   app.addHook('onClose', async () => { scheduleRunner.stop(); await processes.shutdown(); });
   await recordActivity(store, { category: 'config-change', event: 'Dashboard backend started' });

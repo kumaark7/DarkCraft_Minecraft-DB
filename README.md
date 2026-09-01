@@ -18,6 +18,7 @@ The mock adapter remains the default for UI development. Real mode connects the 
 - pnpm
 - Fastify and WebSocket
 - Atomic JSON persistence
+- Scrypt password hashing and TOTP authentication
 
 ## Prerequisites
 
@@ -49,6 +50,8 @@ corepack pnpm api:dev
 Copy `.env.example` to `.env.local` and set `VITE_DATA_SOURCE=real` to connect the frontend through Vite's `/api` proxy.
 
 The development server runs at the URL printed by Vite, normally `http://localhost:5173`.
+
+On first launch, open `/login` to create the owner password and register the displayed QR code or manual key with a standard authenticator application. Subsequent sign-ins accept either the owner password or a fresh six-digit admin authenticator code.
 
 ## Validation
 
@@ -85,6 +88,7 @@ src/
 
 ```text
 server/
+  auth*.ts       Authentication, TOTP, sessions, CSRF, and secure auth storage
   app.ts         REST/WebSocket routes and domain operations
   processManager.ts  Safe Minecraft process and console lifecycle
   security.ts    Root sandbox, traversal, symlink, and read-only policy
@@ -109,6 +113,8 @@ Selected mock or real adapter
 
 ## Backend
 
-The backend is included and covers the complete service interface. It stores runtime metadata under `.data/`, confines Minecraft files to `MINECRAFT_SERVERS_ROOT`, and supports an enforced `DASHBOARD_READ_ONLY=true` mode.
+The backend is included and covers the complete service interface. It stores runtime metadata under `.data/`, keeps authentication and hashed session data under ignored `.data/auth/`, confines Minecraft files to `MINECRAFT_SERVERS_ROOT`, and supports an enforced `DASHBOARD_READ_ONLY=true` mode.
+
+For production, build with `VITE_DATA_SOURCE=real`, keep the backend bound to `127.0.0.1:8787`, and proxy both HTTP and WebSocket traffic through Nginx. Set `DASHBOARD_ALLOWED_ORIGINS=https://darkcraft.projectdarkhope.xyz` and leave `DASHBOARD_SECURE_COOKIES=true`. Nginx must preserve the `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` headers and forward WebSocket `Upgrade` and `Connection` headers.
 
 Production builds emit `dist/` and `dist-server/`. Run the combined service with `corepack pnpm start`. See [docs/BACKEND_ARCHITECTURE.md](docs/BACKEND_ARCHITECTURE.md) for endpoints, security guarantees and deployment boundaries.

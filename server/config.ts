@@ -7,6 +7,8 @@ export interface BackendConfig {
   dataDir: string;
   serversRoot: string;
   frontendDist: string;
+  allowedOrigins: string[];
+  secureCookies: boolean;
 }
 
 function envBoolean(value: string | undefined, fallback: boolean): boolean {
@@ -33,5 +35,8 @@ export function loadConfig(cwd = process.cwd(), env = process.env): BackendConfi
     dataDir,
     serversRoot,
     frontendDist: path.resolve(cwd, 'dist'),
+    allowedOrigins: (env.DASHBOARD_ALLOWED_ORIGINS ?? 'https://darkcraft.projectdarkhope.xyz,http://localhost:5173,http://127.0.0.1:5173')
+      .split(',').map((origin) => origin.trim()).filter(Boolean),
+    secureCookies: envBoolean(env.DASHBOARD_SECURE_COOKIES, true),
   };
 }

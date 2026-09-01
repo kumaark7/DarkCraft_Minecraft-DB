@@ -23,6 +23,7 @@ import ServerPluginsTab from './pages/server/ServerPluginsTab';
 import ServerBackupsTab from './pages/server/ServerBackupsTab';
 import ServerSchedulesTab from './pages/server/ServerSchedulesTab';
 import ServerSettingsTab from './pages/server/ServerSettingsTab';
+import LoginPage from './pages/LoginPage';
 
 export interface RouteConfig {
   name: string;
@@ -33,14 +34,15 @@ export interface RouteConfig {
 }
 
 export const routes: RouteConfig[] = [
+  { name: 'Login', path: '/login', element: <LoginPage />, public: true },
   // Root → Dashboard
-  { name: 'Dashboard', path: '/', element: <DashboardPage />, public: true },
+  { name: 'Dashboard', path: '/', element: <DashboardPage /> },
 
   // Servers
-  { name: 'Servers', path: '/servers', element: <ServersPage />, public: true },
-  { name: 'Add Server', path: '/servers/new', element: <AddServerPage />, public: true },
-  { name: 'Create Server', path: '/servers/new/create', element: <CreateServerPage />, public: true },
-  { name: 'Import Server', path: '/servers/new/import', element: <ImportServerPage />, public: true },
+  { name: 'Servers', path: '/servers', element: <ServersPage /> },
+  { name: 'Add Server', path: '/servers/new', element: <AddServerPage /> },
+  { name: 'Create Server', path: '/servers/new/create', element: <CreateServerPage /> },
+  { name: 'Import Server', path: '/servers/new/import', element: <ImportServerPage /> },
 
   // Server management area with nested tab routes (handled via Outlet in ServerManagementPage)
   // These are registered as flat routes; ServerManagementPage uses <Outlet /> for tab content
@@ -48,7 +50,6 @@ export const routes: RouteConfig[] = [
     name: 'Server Management',
     path: '/servers/:id',
     element: <ServerManagementPage />,
-    public: true,
     children: [
       { name: 'Overview', path: '', element: <ServerOverviewTab /> },
       { name: 'Console', path: 'console', element: <ServerConsoleTab /> },
@@ -62,15 +63,15 @@ export const routes: RouteConfig[] = [
   },
 
   // Management
-  { name: 'Bots', path: '/bots', element: <BotsPage />, public: true },
+  { name: 'Bots', path: '/bots', element: <BotsPage /> },
 
   // Monitoring
-  { name: 'Activity', path: '/activity', element: <ActivityPage />, public: true },
-  { name: 'Logs', path: '/logs', element: <LogsPage />, public: true },
+  { name: 'Activity', path: '/activity', element: <ActivityPage /> },
+  { name: 'Logs', path: '/logs', element: <LogsPage /> },
 
   // System
-  { name: 'Notifications', path: '/notifications', element: <NotificationsPage />, public: true },
-  { name: 'Settings', path: '/settings', element: <SettingsPage />, public: true },
+  { name: 'Notifications', path: '/notifications', element: <NotificationsPage /> },
+  { name: 'Settings', path: '/settings', element: <SettingsPage /> },
 
   // Catch-all
   { name: 'Not Found', path: '*', element: <Navigate to="/" replace /> },

@@ -6,6 +6,7 @@ DarkCraft uses one TypeScript process so it remains easy to run and deploy. The 
 React pages → hooks → service interfaces → mockAdapter
                                   └──────→ realAdapter → /api/v1 → backend
                                                                   ├─ process manager
+                                                                  ├─ authentication store
                                                                   ├─ sandboxed files
                                                                   ├─ backups/imports
                                                                   ├─ schedules
@@ -23,13 +24,19 @@ React pages → hooks → service interfaces → mockAdapter
 ## Security guarantees
 
 - `DASHBOARD_READ_ONLY=true` rejects every mutating endpoint with HTTP 403 before state, files, or processes are changed.
+- Every dashboard REST endpoint and console WebSocket requires a server-side session; only health and the authentication bootstrap endpoints are public.
+- Owner passwords use parameterized scrypt hashes. TOTP counters are persisted to reject replayed authenticator codes.
+- Random session tokens are stored only as SHA-256 hashes under ignored `.data/auth/` and expire after one hour.
+- Cookies are `HttpOnly`, `Secure`, `SameSite=Strict`, and scoped to `/`; logout removes the server-side session immediately.
+- Mutations require an allowed `Origin` and a per-session CSRF token. WebSockets require the same origin, session cookie, and CSRF token.
+- Failed authentication is rate-limited with exponential temporary backoff and generic failure messages.
 - Server IDs use a strict opaque-identifier format.
 - File paths are decoded repeatedly before validation to catch encoded traversal.
 - `..`, `.`, backslashes, null bytes, invalid encoding and paths outside the configured root are rejected.
 - Existing symbolic-link components are rejected, preventing a symlink escape from a server directory.
 - Archive entries are validated before extraction to prevent ZIP Slip.
 - Minecraft processes and commands never use a shell.
-- The backend binds to `127.0.0.1` by default. Put authentication and TLS at the reverse proxy before exposing it remotely.
+- The backend binds to `127.0.0.1:8787` by default. Keep it on loopback and terminate TLS at Nginx; configure `DASHBOARD_ALLOWED_ORIGINS` with the public HTTPS origin.
 
 The browser-side checks are defense in depth. The backend is the security boundary and repeats all validation.
 
@@ -39,6 +46,7 @@ All JSON responses use `{ "data": ... }`; failures use `{ "error": { "code", "me
 
 | Area | Read endpoints | Mutation endpoints |
 |---|---|---|
+| Authentication | `GET /auth/status` | setup start/complete, login, logout |
 | System | `GET /health`, `/host/stats`, `/activity`, `/logs` | — |
 | Servers | `GET /servers`, `/servers/:id`, `/:id/stats` | create, delete, start, stop, restart, kill, import, export |
 | Console | `GET /servers/:id/console`, WebSocket `/console/stream` | send command, clear history |

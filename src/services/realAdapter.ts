@@ -3,7 +3,7 @@ import type {
   ImportInspection, LogEntry, Mod, Player, Plugin, Schedule, Server, ServerFile, ServerSettings, ServerStats,
 } from '@/types';
 import type { ApiClient } from './apiClient';
-import { createApiClient } from './apiClient';
+import { AUTH_UNAUTHORIZED_EVENT, createApiClient } from './apiClient';
 import { resolveServiceConfig } from './config';
 import type { IBackupService, IConsoleService, IFileService, IGlobalService, IPlayerService, IPluginService, IScheduleService, IServerService } from './interfaces';
 import { assertServerId, normalizeServerPath, safeServerPath } from './security';
@@ -29,7 +29,7 @@ export function createRealServices(client: ApiClient) {
     getConsoleHistory: (id, mode, date) => client.get<ConsoleEntry[]>(safeServerPath(id, '/console'), { mode, date }),
     sendCommand: (id, command) => client.post(safeServerPath(id, '/console/commands'), { command }),
     clearConsole: (id) => client.delete(safeServerPath(id, '/console')),
-    subscribeToLive(id, onEntry) { const socket = new WebSocket(client.websocketUrl(safeServerPath(id, '/console/stream'))); socket.onmessage = (event) => onEntry(JSON.parse(event.data) as ConsoleEntry); return () => socket.close(); },
+    subscribeToLive(id, onEntry) { const socket = new WebSocket(client.websocketUrl(safeServerPath(id, '/console/stream'))); socket.onmessage = (event) => onEntry(JSON.parse(event.data) as ConsoleEntry); socket.onclose = (event) => { if (event.code === 4401) window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT)); }; return () => socket.close(); },
   };
   const playerAction = (id: string, action: string, username: string, reason?: string) => client.post(safeServerPath(id, `/players/${action}`), { username, reason });
   const playerService: IPlayerService = {

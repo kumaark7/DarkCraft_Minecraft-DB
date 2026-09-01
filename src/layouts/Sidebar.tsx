@@ -1,12 +1,13 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Bot, Activity, ScrollText,
-  Bell, Settings, ChevronLeft, ChevronRight, Sword, X
+  Bell, Settings, ChevronLeft, ChevronRight, Sword, X, LogOut
 } from 'lucide-react';
 import { cn } from '@/utils';
 import { useLayout } from './LayoutContext';
 import { useNotifications } from '@/hooks/useGlobal';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { useAuth } from '@/contexts/AuthContext';
 
 const NAV_SECTIONS = [
   {
@@ -41,6 +42,7 @@ const NAV_SECTIONS = [
 function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItemClick?: () => void }) {
   const location = useLocation();
   const { unreadCount } = useNotifications();
+  const { logout } = useAuth();
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/';
@@ -60,6 +62,13 @@ function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItem
             <p className="text-[10px] text-muted-foreground leading-none mt-0.5">Control Panel</p>
           </div>
         )}
+      </div>
+
+      <div className="px-2 pb-2">
+        <button type="button" onClick={() => { void logout(); onItemClick?.(); }} className={cn('w-full flex items-center gap-2.5 px-2 py-2 rounded text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground', collapsed && 'justify-center px-0')} aria-label="Log out">
+          <LogOut className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Log out</span>}
+        </button>
       </div>
 
       {/* Nav items */}
