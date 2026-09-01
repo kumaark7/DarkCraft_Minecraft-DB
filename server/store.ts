@@ -12,8 +12,10 @@ export class JsonStore {
   async load(): Promise<void> {
     await mkdir(path.dirname(this.filePath), { recursive: true });
     try {
-      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as Partial<DashboardState>;
-      this.state = { ...emptyState(), ...parsed };
+      const parsed = JSON.parse(await readFile(this.filePath, 'utf8')) as Partial<DashboardState> & { settings?: unknown };
+      const { settings: legacyGameplaySettings, ...runtimeState } = parsed;
+      this.state = { ...emptyState(), ...runtimeState };
+      if (legacyGameplaySettings !== undefined) await this.save();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       await this.save();

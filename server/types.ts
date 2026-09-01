@@ -9,7 +9,6 @@ import type {
   Player,
   Schedule,
   Server,
-  ServerSettings,
 } from '../src/types/index.js';
 
 export interface ManagedServer extends Server {
@@ -19,7 +18,6 @@ export interface ManagedServer extends Server {
 
 export interface DashboardState {
   servers: ManagedServer[];
-  settings: Record<string, ServerSettings>;
   players: Record<string, Player[]>;
   bannedIPs: Record<string, BannedIP[]>;
   backups: Record<string, Backup[]>;
@@ -59,7 +57,6 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
 export function emptyState(): DashboardState {
   return {
     servers: [],
-    settings: {},
     players: {},
     bannedIPs: {},
     backups: {},

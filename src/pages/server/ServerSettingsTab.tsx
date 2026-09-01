@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   Save, RotateCcw, AlertTriangle, ChevronDown, ChevronUp
@@ -17,6 +17,39 @@ import type { ServerSettings } from '@/types';
 
 const GAMEMODES = ['survival', 'creative', 'adventure', 'spectator'];
 const DIFFICULTIES = ['peaceful', 'easy', 'normal', 'hard'];
+const EDITABLE_SETTINGS: (keyof ServerSettings)[] = [
+  'serverName', 'motd', 'serverPort', 'maxPlayers', 'gamemode', 'difficulty',
+  'crackedMode', 'whitelist', 'allowFlight', 'pvp', 'commandBlocks', 'hardcore',
+  'spawnAnimals', 'spawnMonsters', 'spawnNpcs', 'spawnProtection', 'viewDistance',
+  'simulationDistance',
+];
+
+function buildRawProps(settings: ServerSettings): string {
+  return Object.entries(settings.rawProperties).map(([key, value]) => `${key}=${value}`).join('\n');
+}
+
+function changedSettings(current: ServerSettings, original: ServerSettings): Partial<ServerSettings> {
+  const patch: Partial<ServerSettings> = {};
+  const writable = patch as Record<string, unknown>;
+  for (const key of EDITABLE_SETTINGS) {
+    if (!Object.is(current[key], original[key])) writable[key] = current[key];
+  }
+  return patch;
+}
+
+function changedRawProperties(content: string, original: Record<string, string>): Record<string, string> {
+  const changed: Record<string, string> = {};
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('!')) continue;
+    const separator = trimmed.search(/[=:]/);
+    if (separator < 1) throw new Error('Every property must use key=value format');
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim();
+    if (original[key] !== value) changed[key] = value;
+  }
+  return changed;
+}
 
 function Section({ title, children, collapsible = false }: { title: string; children: React.ReactNode; collapsible?: boolean }) {
   const [open, setOpen] = useState(true);
@@ -75,37 +108,18 @@ export default function ServerSettingsTab() {
   const [saving, setSaving] = useState(false);
   const [rawProps, setRawProps] = useState('');
   const [rawDirty, setRawDirty] = useState(false);
+  const original = useRef<ServerSettings | null>(null);
 
   useEffect(() => {
     serverService.getServerSettings(id!).then(s => {
       if (s) {
         setSettings(s);
         setRawProps(buildRawProps(s));
+        original.current = s;
       }
       setLoading(false);
     });
   }, [id]);
-
-  const buildRawProps = (s: ServerSettings) => [
-    `server-name=${s.serverName}`,
-    `motd=${s.motd}`,
-    `server-port=${s.serverPort}`,
-    `max-players=${s.maxPlayers}`,
-    `online-mode=${!s.crackedMode}`,
-    `white-list=${s.whitelist}`,
-    `pvp=${s.pvp}`,
-    `enable-command-block=${s.commandBlocks}`,
-    `allow-flight=${s.allowFlight}`,
-    `gamemode=${s.gamemode}`,
-    `difficulty=${s.difficulty}`,
-    `hardcore=${s.hardcore ?? false}`,
-    `spawn-animals=${s.spawnAnimals ?? true}`,
-    `spawn-monsters=${s.spawnMonsters ?? true}`,
-    `spawn-npcs=${s.spawnNpcs ?? true}`,
-    `spawn-protection=${s.spawnProtection ?? 16}`,
-    `view-distance=${s.viewDistance}`,
-    `simulation-distance=${s.simulationDistance}`,
-  ].join('\n');
 
   const set = (key: keyof ServerSettings) => (val: string | number | boolean) => {
     setSettings(prev => prev ? { ...prev, [key]: val } : null);
@@ -113,17 +127,36 @@ export default function ServerSettingsTab() {
   };
 
   const handleSave = async (restart = false) => {
-    if (!settings) return;
+    if (!settings || !original.current) return;
     setSaving(true);
-    await serverService.updateServerSettings(id!, settings);
+    await serverService.updateServerSettings(id!, changedSettings(settings, original.current));
+    const refreshed = await serverService.getServerSettings(id!);
+    if (refreshed) {
+      setSettings(refreshed);
+      setRawProps(buildRawProps(refreshed));
+      original.current = refreshed;
+    }
     toast.success(restart ? 'Settings saved. Server is restarting…' : 'Settings saved');
     setDirty(false);
     setSaving(false);
   };
 
-  const handleRawSave = () => {
-    toast.success('Raw properties saved');
-    setRawDirty(false);
+  const handleRawSave = async () => {
+    if (!settings) return;
+    try {
+      const rawProperties = changedRawProperties(rawProps, settings.rawProperties);
+      await serverService.updateServerSettings(id!, { rawProperties });
+      const refreshed = await serverService.getServerSettings(id!);
+      if (refreshed) {
+        setSettings(refreshed);
+        setRawProps(buildRawProps(refreshed));
+        original.current = refreshed;
+      }
+      toast.success('Raw properties saved');
+      setRawDirty(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save raw properties');
+    }
   };
 
   if (loading) return <LoadingState message="Loading settings…" />;
@@ -224,7 +257,7 @@ export default function ServerSettingsTab() {
             <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" /> You have unsaved changes
           </p>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => { setDirty(false); }} className="h-8 text-xs">
+            <Button variant="secondary" size="sm" onClick={() => { if (original.current) setSettings(original.current); setDirty(false); }} className="h-8 text-xs">
               <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Discard
             </Button>
             <Button size="sm" variant="secondary" className="h-8 text-xs" onClick={() => handleSave(false)} disabled={saving}>

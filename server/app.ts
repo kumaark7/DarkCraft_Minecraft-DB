@@ -50,6 +50,11 @@ import { inspectServerArchive } from './importDetection.js';
 import { SoftwareCatalogService } from './softwareCatalog.js';
 import { installServerSoftware, type InstallerRunner } from './serverInstaller.js';
 import type { InstallableServerSoftware } from '../src/types/index.js';
+import {
+  initialServerProperties,
+  parseServerProperties,
+  updateServerPropertiesFile,
+} from './serverProperties.js';
 
 interface AppContext {
   app: FastifyInstance;
@@ -136,34 +141,6 @@ async function recordActivity(store: JsonStore, event: Omit<ActivityEvent, 'id' 
   });
 }
 
-function properties(settings: ServerSettings): string {
-  const values: Record<string, string | number | boolean> = {
-    'server-port': settings.serverPort,
-    'max-players': settings.maxPlayers,
-    motd: settings.motd,
-    gamemode: settings.gamemode,
-    difficulty: settings.difficulty,
-    'online-mode': !settings.crackedMode,
-    'white-list': settings.whitelist,
-    'allow-flight': settings.allowFlight,
-    pvp: settings.pvp,
-    'enable-command-block': settings.commandBlocks,
-    hardcore: settings.hardcore,
-    'spawn-animals': settings.spawnAnimals,
-    'spawn-monsters': settings.spawnMonsters,
-    'spawn-npcs': settings.spawnNpcs,
-    'spawn-protection': settings.spawnProtection,
-    'view-distance': settings.viewDistance,
-    'simulation-distance': settings.simulationDistance,
-    ...settings.rawProperties,
-  };
-  return `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`;
-}
-
-function defaultServerSettings(serverId: string, serverName: string): ServerSettings {
-  return { serverId, serverName, motd: serverName, serverPort: 25565, maxPlayers: 20, gamemode: 'survival', difficulty: 'normal', crackedMode: false, whitelist: false, allowFlight: false, pvp: true, commandBlocks: false, hardcore: false, spawnAnimals: true, spawnMonsters: true, spawnNpcs: true, spawnProtection: 16, viewDistance: 10, simulationDistance: 10, rawProperties: {} };
-}
-
 async function listFiles(directory: string, serverRoot: string): Promise<ServerFile[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   return Promise.all(entries.filter((entry) => !entry.isSymbolicLink()).map(async (entry) => {
@@ -246,7 +223,12 @@ function registerReadRoutes(context: AppContext): void {
     return ok(await withAvailableBuild(context, server));
   });
   app.get('/api/v1/servers/:id/stats', async (request) => ok(await processes.stats(params(request).id ?? '')));
-  app.get('/api/v1/servers/:id/settings', async (request) => ok(store.get().settings[params(request).id ?? ''] ?? null));
+  app.get('/api/v1/servers/:id/settings', async (request) => {
+    const id = params(request).id ?? '';
+    const server = serverById(store.get(), id);
+    const content = await readFile(await serverPath(context, id, '/server.properties'), 'utf8');
+    return ok(parseServerProperties(content, { serverId: id, serverName: server.name }));
+  });
   app.get('/api/v1/servers/:id/console', async (request) => ok(processes.getHistory(params(request).id ?? '')));
   app.get('/api/v1/servers/:id/players', async (request) => ok(store.get().players[params(request).id ?? ''] ?? []));
   app.get('/api/v1/servers/:id/banned-ips', async (request) => ok(store.get().bannedIPs[params(request).id ?? ''] ?? []));
@@ -314,12 +296,32 @@ function registerWriteRoutes(context: AppContext): void {
     catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
     const server: ManagedServer = { id, name, status: 'OFFLINE', software, minecraftVersion, softwareBuild, javaVersion: String(input.javaVersion ?? 'Java'), ip: '0.0.0.0', port, playerCount: 0, maxPlayers, cpu: 0, ram: 0, ramMax: ram, disk: 0, diskMax: 0, uptime: 0, directory, startupCommand: runtime.startupCommand, startupExecutable: runtime.startupExecutable, startupArgs: runtime.startupArgs, createdAt: new Date().toISOString() };
     const settings: ServerSettings = { serverId: id, serverName: name, motd: name, serverPort: port, maxPlayers, gamemode: String(input.gamemode ?? 'survival') as ServerSettings['gamemode'], difficulty: String(input.difficulty ?? 'normal') as ServerSettings['difficulty'], crackedMode: Boolean(input.crackedMode), whitelist: Boolean(input.whitelist), allowFlight: Boolean(input.allowFlight), pvp: input.pvp !== false, commandBlocks: Boolean(input.commandBlocks), hardcore: false, spawnAnimals: true, spawnMonsters: true, spawnNpcs: true, spawnProtection: 16, viewDistance: Number(input.viewDistance ?? 10), simulationDistance: Number(input.simulationDistance ?? 10), rawProperties: {} };
-    await writeFile(path.join(directory, 'server.properties'), properties(settings)); await writeFile(path.join(directory, 'eula.txt'), 'eula=false\n');
-    await store.update((state) => { state.servers.push(server); state.settings[id] = settings; state.players[id] = []; state.backups[id] = []; state.schedules[id] = []; });
+    await writeFile(path.join(directory, 'server.properties'), initialServerProperties(settings)); await writeFile(path.join(directory, 'eula.txt'), 'eula=false\n');
+    await store.update((state) => { state.servers.push(server); state.players[id] = []; state.backups[id] = []; state.schedules[id] = []; });
     reply.code(201); return ok(server);
   });
-  app.delete('/api/v1/servers/:id', async (request) => { guard(); const id = params(request).id ?? ''; const server = serverById(store.get(), id); if (body<{ confirmName: string }>(request).confirmName !== server.name) throw Object.assign(new Error('Server name mismatch'), { statusCode: 409 }); await processes.kill(id); await rm(server.directory, { recursive: true, force: true }); await store.update((state) => { state.servers = state.servers.filter((item) => item.id !== id); delete state.settings[id]; delete state.players[id]; delete state.backups[id]; delete state.schedules[id]; }); return ok(null); });
-  app.patch('/api/v1/servers/:id/settings', async (request) => { guard(); const id = params(request).id ?? ''; const current = store.get().settings[id]; if (!current) throw Object.assign(new Error('Settings not found'), { statusCode: 404 }); const next = { ...current, ...body<Partial<ServerSettings>>(request), serverId: id }; await writeFile(await serverPath(context, id, '/server.properties'), properties(next)); await store.update((state) => { state.settings[id] = next; }); return ok(null); });
+  app.delete('/api/v1/servers/:id', async (request) => { guard(); const id = params(request).id ?? ''; const server = serverById(store.get(), id); if (body<{ confirmName: string }>(request).confirmName !== server.name) throw Object.assign(new Error('Server name mismatch'), { statusCode: 409 }); await processes.kill(id); await rm(server.directory, { recursive: true, force: true }); await store.update((state) => { state.servers = state.servers.filter((item) => item.id !== id); delete state.players[id]; delete state.backups[id]; delete state.schedules[id]; }); return ok(null); });
+  app.patch('/api/v1/servers/:id/settings', async (request) => {
+    guard();
+    const id = params(request).id ?? '';
+    const currentServer = serverById(store.get(), id);
+    const patch = body<Partial<ServerSettings>>(request);
+    const serverName = patch.serverName?.trim() || currentServer.name;
+    const settings = await updateServerPropertiesFile(
+      await serverPath(context, id, '/server.properties'),
+      { serverId: id, serverName },
+      patch,
+    );
+    if (serverName !== currentServer.name || settings.serverPort !== currentServer.port || settings.maxPlayers !== currentServer.maxPlayers) {
+      await store.update((state) => {
+        const server = serverById(state, id);
+        server.name = serverName;
+        server.port = settings.serverPort;
+        server.maxPlayers = settings.maxPlayers;
+      });
+    }
+    return ok(settings);
+  });
   app.post('/api/v1/servers/:id/console/commands', async (request) => { guard(); processes.sendCommand(params(request).id ?? '', body<{ command: string }>(request).command); return ok(null); });
   app.delete('/api/v1/servers/:id/console', async (request) => { guard(); processes.clearHistory(params(request).id ?? ''); return ok(null); });
   registerPlayerWrites(context); registerFileWrites(context); registerBackupWrites(context); registerScheduleWrites(context); registerGlobalWrites(context);
@@ -438,7 +440,7 @@ function registerImportsAndExports(context: AppContext): void {
         createdAt: new Date().toISOString(),
       };
       await store.update((state) => {
-        state.servers.push(server); state.settings[id] = defaultServerSettings(id, name);
+        state.servers.push(server);
         state.players[id] = []; state.backups[id] = []; state.schedules[id] = [];
       });
       imports.delete(inspectionId);
