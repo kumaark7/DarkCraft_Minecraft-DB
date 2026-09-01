@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { consoleService } from '@/services';
 import type { ConsoleEntry, ConsoleViewMode, ConsoleSeverity } from '@/types';
+import { mergeConsoleEntries } from './consoleEntries';
 
 export function useConsole(serverId: string) {
   const [entries, setEntries] = useState<ConsoleEntry[]>([]);
@@ -10,34 +11,42 @@ export function useConsole(serverId: string) {
   const [search, setSearch] = useState('');
   const [paused, setPaused] = useState(false);
   const unsubRef = useRef<(() => void) | null>(null);
+  const pausedRef = useRef(false);
+  const pausedEntriesRef = useRef<ConsoleEntry[]>([]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    if (!paused && pausedEntriesRef.current.length > 0) {
+      setEntries((previous) => mergeConsoleEntries(previous, pausedEntriesRef.current));
+      pausedEntriesRef.current = [];
+    }
+  }, [paused]);
 
   const load = useCallback(async (m: ConsoleViewMode) => {
     setLoading(true);
-    const data = await consoleService.getConsoleHistory(serverId, m);
-    setEntries(data);
-    setLoading(false);
+    try {
+      const data = await consoleService.getConsoleHistory(serverId, m);
+      setEntries((current) => mergeConsoleEntries(data, current));
+    } finally {
+      setLoading(false);
+    }
   }, [serverId]);
 
   useEffect(() => {
-    load(mode);
+    setEntries([]);
+    pausedEntriesRef.current = [];
     if (mode === 'live') {
       unsubRef.current = consoleService.subscribeToLive(serverId, (entry) => {
-        if (!paused) setEntries(prev => [...prev.slice(-499), entry]);
+        if (pausedRef.current) pausedEntriesRef.current = mergeConsoleEntries(pausedEntriesRef.current, [entry]);
+        else setEntries((previous) => mergeConsoleEntries(previous, [entry]));
       });
     }
+    void load(mode);
     return () => { unsubRef.current?.(); unsubRef.current = null; };
-  }, [serverId, mode, load, paused]);
+  }, [serverId, mode, load]);
 
   const sendCommand = useCallback(async (command: string) => {
     await consoleService.sendCommand(serverId, command);
-    const entry: ConsoleEntry = {
-      id: `sent-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      severity: 'COMMAND',
-      message: `[${new Date().toTimeString().slice(0, 8)} INFO]: Issued server command: /${command}`,
-      source: 'LIVE',
-    };
-    setEntries(prev => [...prev, entry]);
   }, [serverId]);
 
   const clear = useCallback(async () => {

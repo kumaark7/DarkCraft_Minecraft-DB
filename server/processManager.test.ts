@@ -34,6 +34,7 @@ describe('managed Minecraft runtime', () => {
       "console.log('[main/INFO]: Loading 2 mods:')",
       "console.log('[main/INFO]: \\t- dark-example 1.0.0')",
       "console.log('[main/INFO]: \\t- fabric-api 1.2.3')",
+      "console.error('[Server thread/WARN]: stderr diagnostic')",
       "console.log('[Server thread/INFO]: Steve joined the game')",
       "setTimeout(() => console.log('[Server thread/INFO]: Done (1.00s)! For help, type \\\"help\\\"'), 50)",
       "let listRequests = 0; process.stdin.on('data', data => { if (String(data).includes('list')) { console.log('List request ' + (++listRequests)); console.log('[Server thread/INFO]: There are 2 of a max of 42 players online: Steve, Alex') } })",
@@ -63,6 +64,9 @@ describe('managed Minecraft runtime', () => {
     expect(snapshot?.diskMax).toBeGreaterThan(0);
     const stats = await manager.stats(server.id);
     expect(stats).toMatchObject({ networkIn: null, networkOut: null, tps: null, mspt: null, players: 2, maxPlayers: 42 });
+    const persisted = await manager.readHistory(server.id);
+    expect(persisted.some((entry) => entry.message.includes('Done (1.00s)') && entry.stream === 'stdout')).toBe(true);
+    expect(persisted.some((entry) => entry.message.includes('stderr diagnostic') && entry.stream === 'stderr')).toBe(true);
 
     await manager.kill(server.id);
     await waitFor(() => store.get().servers[0]?.status === 'CRASHED');

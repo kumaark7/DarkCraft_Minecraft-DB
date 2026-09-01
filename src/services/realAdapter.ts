@@ -2,6 +2,7 @@ import type {
   ActivityEvent, AppNotification, Backup, BannedIP, Bot, ConsoleEntry, GlobalSettings, HostStats,
   ImportInspection, InstallableServerSoftware, LogEntry, Mod, Player, Plugin, Schedule, Server, ServerFile,
   ServerSettings, ServerStats, SoftwareBuild, SoftwareCatalog,
+  MetricHistoryRange, ServerMetricSample, ModIssue,
 } from '@/types';
 import type { ApiClient } from './apiClient';
 import { AUTH_UNAUTHORIZED_EVENT, createApiClient } from './apiClient';
@@ -14,6 +15,7 @@ export function createRealServices(client: ApiClient) {
     getServers: () => client.get<Server[]>('/servers'),
     getServer: (id) => client.get<Server | null>(safeServerPath(id)),
     getServerStats: (id) => client.get<ServerStats | null>(safeServerPath(id, '/stats')),
+    getServerMetricHistory: (id, range: MetricHistoryRange) => client.get<ServerMetricSample[]>(safeServerPath(id, '/metrics'), { range }),
     startServer: (id) => client.post(safeServerPath(id, '/start')),
     stopServer: (id) => client.post(safeServerPath(id, '/stop')),
     restartServer: (id) => client.post(safeServerPath(id, '/restart')),
@@ -61,6 +63,7 @@ export function createRealServices(client: ApiClient) {
   };
   const pluginService: IPluginService = {
     getPlugins: (id) => client.get<Plugin[]>(safeServerPath(id, '/plugins')), getMods: (id) => client.get<Mod[]>(safeServerPath(id, '/mods')),
+    getModIssues: (id) => client.get<ModIssue[]>(safeServerPath(id, '/mod-issues')),
     uploadPlugin: (id, file) => client.upload(safeServerPath(id, '/plugins/upload'), file),
     uploadMod: (id, file) => client.upload(safeServerPath(id, '/mods/upload'), file),
     downloadPlugin: (id, filename) => client.download(safeServerPath(id, '/files/download'), filename, { path: normalizeServerPath(`/plugins/${filename}`) }),
@@ -68,6 +71,7 @@ export function createRealServices(client: ApiClient) {
     deletePlugin: (id, pluginId) => client.delete(safeServerPath(id, `/plugins/${encodeURIComponent(pluginId)}`)),
     deleteMod: (id, modId) => client.delete(safeServerPath(id, `/mods/${encodeURIComponent(modId)}`)),
     togglePlugin: (id, pluginId, enabled) => client.post(safeServerPath(id, `/plugins/${encodeURIComponent(pluginId)}/toggle`), { enabled }),
+    toggleMod: (id, modId, enabled) => client.post(safeServerPath(id, `/mods/${encodeURIComponent(modId)}/toggle`), { enabled }),
   };
   const backupService: IBackupService = {
     getBackups: (id) => client.get<Backup[]>(safeServerPath(id, '/backups')),

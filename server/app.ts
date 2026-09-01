@@ -57,6 +57,9 @@ import {
 } from './serverProperties.js';
 import { inspectModJar, inspectPluginJar } from './jarMetadata.js';
 import { readBannedIps, readPlayers } from './playerData.js';
+import { ConsoleLogStore } from './consoleLogStore.js';
+import { ModIssueStore } from './modIssues.js';
+import { MetricHistorySampler, MetricHistoryStore } from './metricHistory.js';
 
 interface AppContext {
   app: FastifyInstance;
@@ -68,6 +71,7 @@ interface AppContext {
   catalog: SoftwareCatalogService;
   installerFetcher?: typeof fetch;
   installerRunner?: InstallerRunner;
+  metricHistory: MetricHistoryStore;
 }
 
 interface ImportCandidate {
@@ -225,13 +229,23 @@ function registerReadRoutes(context: AppContext): void {
     return ok(await withAvailableBuild(context, server));
   });
   app.get('/api/v1/servers/:id/stats', async (request) => ok(await processes.stats(params(request).id ?? '')));
+  app.get('/api/v1/servers/:id/metrics', async (request) => {
+    const id = params(request).id ?? '';
+    const range = query(request).range;
+    const selectedRange = range === '15m' || range === '6h' || range === '24h' ? range : '1h';
+    return ok(await context.metricHistory.read(serverById(store.get(), id).directory, selectedRange));
+  });
   app.get('/api/v1/servers/:id/settings', async (request) => {
     const id = params(request).id ?? '';
     const server = serverById(store.get(), id);
     const content = await readFile(await serverPath(context, id, '/server.properties'), 'utf8');
     return ok(parseServerProperties(content, { serverId: id, serverName: server.name }));
   });
-  app.get('/api/v1/servers/:id/console', async (request) => ok(processes.getHistory(params(request).id ?? '')));
+  app.get('/api/v1/servers/:id/console', async (request) => {
+    const mode = query(request).mode;
+    const selectedMode = mode === 'today' || mode === 'yesterday' || mode === 'older' ? mode : 'live';
+    return ok(await processes.readHistory(params(request).id ?? '', selectedMode));
+  });
   app.get('/api/v1/servers/:id/players', async (request) => {
     const id = params(request).id ?? '';
     const root = await serverPath(context, id, '/');
@@ -251,6 +265,7 @@ function registerReadRoutes(context: AppContext): void {
   app.get('/api/v1/servers/:id/files/download', async (request, reply) => sendDownload(reply, await serverPath(context, params(request).id ?? '', query(request).path ?? '')));
   app.get('/api/v1/servers/:id/plugins', async (request) => ok(await jars(context, params(request).id ?? '', 'plugins')));
   app.get('/api/v1/servers/:id/mods', async (request) => ok(await jars(context, params(request).id ?? '', 'mods')));
+  app.get('/api/v1/servers/:id/mod-issues', async (request) => ok(await processes.getModIssues(params(request).id ?? '')));
   app.get('/api/v1/servers/:id/backups', async (request) => ok(store.get().backups[params(request).id ?? ''] ?? []));
   app.get('/api/v1/servers/:id/backups/:backupId/download', async (request, reply) => {
     const p = params(request); const backup = (store.get().backups[p.id ?? ''] ?? []).find((item) => item.id === p.backupId);
@@ -338,7 +353,7 @@ function registerWriteRoutes(context: AppContext): void {
     return ok(settings);
   });
   app.post('/api/v1/servers/:id/console/commands', async (request) => { guard(); processes.sendCommand(params(request).id ?? '', body<{ command: string }>(request).command); return ok(null); });
-  app.delete('/api/v1/servers/:id/console', async (request) => { guard(); processes.clearHistory(params(request).id ?? ''); return ok(null); });
+  app.delete('/api/v1/servers/:id/console', async (request) => { guard(); await processes.clearHistory(params(request).id ?? ''); return ok(null); });
   registerPlayerWrites(context); registerFileWrites(context); registerBackupWrites(context); registerScheduleWrites(context); registerGlobalWrites(context);
 }
 
@@ -477,6 +492,7 @@ function registerPluginWrites(context: AppContext): void {
   app.delete('/api/v1/servers/:id/plugins/:pluginId', async (request) => { writable(config); const p = params(request); await rm(await serverPath(context, p.id ?? '', `/plugins/${assertFileName(p.pluginId ?? '')}`), { force: true }); return ok(null); });
   app.delete('/api/v1/servers/:id/mods/:modId', async (request) => { writable(config); const p = params(request); await rm(await serverPath(context, p.id ?? '', `/mods/${assertFileName(p.modId ?? '')}`), { force: true }); return ok(null); });
   app.post('/api/v1/servers/:id/plugins/:pluginId/toggle', async (request) => { writable(config); const p = params(request); const enabled = body<{ enabled: boolean }>(request).enabled; const file = assertFileName(p.pluginId ?? ''); const current = await serverPath(context, p.id ?? '', `/plugins/${file}`); const desired = enabled ? file.replace(/\.disabled$/, '') : file.endsWith('.disabled') ? file : `${file}.disabled`; await rename(current, await serverPath(context, p.id ?? '', `/plugins/${desired}`)); return ok(null); });
+  app.post('/api/v1/servers/:id/mods/:modId/toggle', async (request) => { writable(config); const p = params(request); const enabled = body<{ enabled: boolean }>(request).enabled; const file = assertFileName(p.modId ?? ''); const current = await serverPath(context, p.id ?? '', `/mods/${file}`); const desired = enabled ? file.replace(/\.disabled$/, '') : file.endsWith('.disabled') ? file : `${file}.disabled`; await rename(current, await serverPath(context, p.id ?? '', `/mods/${desired}`)); return ok(null); });
 }
 
 interface BuildAppOptions {
@@ -486,20 +502,31 @@ interface BuildAppOptions {
   catalogFetcher?: typeof fetch;
   installerFetcher?: typeof fetch;
   installerRunner?: InstallerRunner;
+  metricIntervalMs?: number;
 }
 
 export async function buildApp(config: BackendConfig, options: BuildAppOptions = {}): Promise<AppContext> {
   await mkdir(config.dataDir, { recursive: true }); await mkdir(config.serversRoot, { recursive: true });
   const store = new JsonStore(path.join(config.dataDir, 'dashboard.json')); await store.load();
-  const events = new DashboardEvents(); const processes = new ProcessManager(store, events); const hostMetrics = new HostMetricsSampler();
+  const events = new DashboardEvents();
+  const consoleLogs = new ConsoleLogStore({
+    maxBytes: config.consoleLogMaxBytes,
+    retentionFiles: config.consoleLogRetentionFiles,
+  });
+  const modIssues = new ModIssueStore();
+  const processes = new ProcessManager(store, events, undefined, undefined, consoleLogs, modIssues);
+  const metricHistory = new MetricHistoryStore();
+  const metricSampler = new MetricHistorySampler(metricHistory, async () => Promise.all(store.get().servers.map(async (server) => ({ directory: server.directory, stats: await processes.stats(server.id) }))), options.metricIntervalMs);
+  const hostMetrics = new HostMetricsSampler();
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 16 * 1024 * 1024, trustProxy: true });
   await app.register(multipart, { limits: { fileSize: 512 * 1024 * 1024, files: 1 } }); await app.register(websocket);
   const auth = await installAuthentication(app, config, { now: options.now, sessionTtlMs: options.sessionTtlMs, lockoutThreshold: options.lockoutThreshold });
   const catalog = new SoftwareCatalogService(path.join(config.dataDir, 'catalog', 'metadata.json'), options.catalogFetcher, options.now); await catalog.load();
-  const context = { app, store, processes, hostMetrics, auth, config, catalog, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner };
+  const context = { app, store, processes, hostMetrics, auth, config, catalog, metricHistory, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner };
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
   const scheduleRunner = new ScheduleRunner(store, (schedule) => runSchedule(context, schedule)); scheduleRunner.start();
+  metricSampler.start();
   app.get('/api/v1/servers/:id/console/stream', { websocket: true }, (socket, request) => {
     const id = params(request).id ?? ''; assertIdentifier(id);
     const session = auth.getRequestAuth(request);
@@ -511,7 +538,7 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
     socket.on('close', () => { clearTimeout(expiryTimer); unsubscribeSession(); unsubscribeConsole(); });
   });
   if (existsSync(config.frontendDist)) { await app.register(fastifyStatic, { root: config.frontendDist, wildcard: false }); app.setNotFoundHandler((request, reply) => request.url.startsWith('/api/') ? reply.code(404).send({ error: { code: 'NotFound', message: 'Endpoint not found' } }) : reply.sendFile('index.html')); }
-  app.addHook('onClose', async () => { scheduleRunner.stop(); await processes.shutdown(); });
+  app.addHook('onClose', async () => { scheduleRunner.stop(); await metricSampler.stop(); await processes.shutdown(); });
   await recordActivity(store, { category: 'config-change', event: 'Dashboard backend started' });
   return context;
 }

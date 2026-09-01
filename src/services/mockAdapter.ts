@@ -74,10 +74,10 @@ setInterval(() => {
       ...s,
       cpu: Math.max(5, Math.min(95, (s.cpu ?? 0) + (Math.random() - 0.5) * 8)),
       ram: Math.max(512, Math.min(s.ramMax - 256, (s.ram ?? 0) + (Math.random() - 0.5) * 200)),
-      networkIn: Math.max(0, (s.networkIn ?? 0) + (Math.random() - 0.5) * 50),
-      networkOut: Math.max(0, (s.networkOut ?? 0) + (Math.random() - 0.5) * 30),
-      tps: Math.max(15, Math.min(20, (s.tps ?? 20) + (Math.random() - 0.5) * 0.4)),
-      mspt: Math.max(1, Math.min(20, (s.mspt ?? 1) + (Math.random() - 0.5) * 1)),
+      networkIn: null,
+      networkOut: null,
+      tps: null,
+      mspt: null,
       uptime: s.uptime + 2,
       timestamp: Date.now(),
     };
@@ -91,6 +91,11 @@ export const serverService: IServerService = {
   async getServers() { await delay(300); return [..._servers]; },
   async getServer(id) { await delay(200); return _servers.find(s => s.id === id) ?? null; },
   async getServerStats(id) { await delay(100); return _stats[id] ?? null; },
+  async getServerMetricHistory(id) {
+    await delay(100);
+    const stats = _stats[id];
+    return stats ? [{ timestamp: Date.now(), cpu: stats.cpu, ram: stats.ram, ramMax: stats.ramMax, players: stats.players, maxPlayers: stats.maxPlayers, tps: null, mspt: null, networkIn: null, networkOut: null }] : [];
+  },
   async startServer(id) {
     await delay(600);
     _servers = _servers.map(s => s.id === id ? { ...s, status: 'STARTING' } : s);
@@ -98,7 +103,7 @@ export const serverService: IServerService = {
       _servers = _servers.map(s => s.id === id ? { ...s, status: 'ONLINE', uptime: 0 } : s);
       if (!_stats[id]) {
         const srv = _servers.find(x => x.id === id);
-        if (srv) _stats[id] = { serverId: id, cpu: 12, ram: 1024, ramMax: srv.ramMax, disk: srv.disk, diskMax: srv.diskMax, networkIn: 10, networkOut: 5, players: 0, maxPlayers: srv.maxPlayers, uptime: 0, tps: 20, mspt: 2, timestamp: Date.now() };
+        if (srv) _stats[id] = { serverId: id, cpu: 12, ram: 1024, ramMax: srv.ramMax, disk: srv.disk, diskMax: srv.diskMax, networkIn: null, networkOut: null, players: 0, maxPlayers: srv.maxPlayers, uptime: 0, tps: null, mspt: null, timestamp: Date.now() };
       }
     }, 3000);
   },
@@ -362,6 +367,7 @@ export const fileService: IFileService = {
 export const pluginService: IPluginService = {
   async getPlugins(id) { await delay(300); return _plugins[id] ?? []; },
   async getMods(id) { await delay(300); return _mods[id] ?? []; },
+  async getModIssues() { await delay(100); return []; },
   async uploadPlugin(id, file) {
     await delay(1200);
     if (!_plugins[id]) _plugins[id] = [];
@@ -385,6 +391,10 @@ export const pluginService: IPluginService = {
   async togglePlugin(id, pluginId, enabled) {
     await delay(200);
     _plugins[id] = (_plugins[id] ?? []).map(p => p.id === pluginId ? { ...p, status: enabled ? 'enabled' : 'disabled' } : p);
+  },
+  async toggleMod(id, modId, enabled) {
+    await delay(200);
+    _mods[id] = (_mods[id] ?? []).map(mod => mod.filename === modId ? { ...mod, filename: enabled ? mod.filename.replace(/\.disabled$/, '') : `${mod.filename}.disabled`, status: enabled ? 'Unknown' : 'Disabled' } : mod);
   },
 };
 

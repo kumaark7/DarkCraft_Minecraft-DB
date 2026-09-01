@@ -177,6 +177,22 @@ export interface ConsoleEntry {
   message: string;
   source: ConsoleSource;
   thread?: string;
+  stream?: 'stdout' | 'stderr' | 'system' | 'command';
+}
+
+export type MetricHistoryRange = '15m' | '1h' | '6h' | '24h';
+
+export interface ServerMetricSample {
+  timestamp: number;
+  cpu: number | null;
+  ram: number | null;
+  ramMax: number;
+  players: number;
+  maxPlayers: number;
+  tps: number | null;
+  mspt: number | null;
+  networkIn: number | null;
+  networkOut: number | null;
 }
 
 // ============================================================
@@ -224,6 +240,26 @@ export interface Mod {
   inspectionError?: string;
   description?: string;
   author?: string;
+}
+
+export type ModIssueSeverity = 'Error' | 'Warning' | 'Dependency' | 'Compatibility' | 'Recommendation';
+
+export interface ModIssue {
+  id: string;
+  fingerprint: string;
+  modId: string;
+  modName: string;
+  severity: ModIssueSeverity;
+  reason: string;
+  exception?: string;
+  affectedResource?: string;
+  firstDetectedAt: string;
+  lastDetectedAt: string;
+  occurrenceCount: number;
+  sourceLogLines: string[];
+  status: 'active' | 'not-seen' | 'resolved';
+  resolvedAt?: string;
+  lastRunId?: string;
 }
 
 // ============================================================

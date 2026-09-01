@@ -7,6 +7,8 @@ import { ProgressBar } from '@/components/shared/ProgressBar';
 import { useServer } from '@/hooks/useServers';
 import { useActivity } from '@/hooks/useGlobal';
 import { formatBytes, formatUptime, formatTimeAgo, cn } from '@/utils';
+import { useMetricHistory } from '@/hooks/useMetricHistory';
+import { PerformanceHistoryGraph } from '@/components/server/PerformanceHistoryGraph';
 
 function StatTile({ label, value, sub, icon, color }: {
   label: string; value: string | number; sub?: string;
@@ -37,6 +39,7 @@ export default function ServerOverviewTab() {
   const { id } = useParams<{ id: string }>();
   const { server, stats } = useServer(id!);
   const { activity } = useActivity();
+  const metricHistory = useMetricHistory(id!);
   const serverActivity = activity.filter(e => e.serverId === id).slice(0, 5);
 
   if (!server) return null;
@@ -126,6 +129,8 @@ export default function ServerOverviewTab() {
           </div>
         )}
       </div>
+
+      <PerformanceHistoryGraph samples={metricHistory.samples} range={metricHistory.range} onRangeChange={metricHistory.setRange} loading={metricHistory.loading} />
 
       {/* Info panels */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

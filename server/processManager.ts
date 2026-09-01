@@ -11,6 +11,8 @@ import type { ManagedServer } from './types.js';
 import { detectRuntime } from './runtimeDetection.js';
 import { readJavaVersion } from './javaVersion.js';
 import { readRawProperties } from './serverProperties.js';
+import { ConsoleLogStore } from './consoleLogStore.js';
+import { detectModIssue, ModIssueStore } from './modIssues.js';
 
 interface Runtime {
   process: ChildProcessWithoutNullStreams;
@@ -47,26 +49,41 @@ export class ProcessManager {
   private readonly lastListRefreshAt = new Map<string, number>();
   private readonly loadedMods = new Map<string, Set<string>>();
   private readonly fabricModCaptures = new Map<string, { expected: number; captured: number }>();
+  private readonly diagnosticRunIds = new Map<string, string>();
 
   constructor(
     private readonly store: JsonStore,
     private readonly events: DashboardEvents,
     private readonly readProcessUsage: ProcessUsageReader = (pid) => pidusage(pid),
     private readonly readExecutableJavaVersion: JavaVersionReader = readJavaVersion,
+    private readonly consoleLogs: ConsoleLogStore = new ConsoleLogStore(),
+    private readonly modIssues: ModIssueStore = new ModIssueStore(),
   ) {}
 
-  private record(serverId: string, message: string, source: ConsoleEntry['source'] = 'LIVE'): void {
+  private record(
+    serverId: string,
+    message: string,
+    source: ConsoleEntry['source'] = 'LIVE',
+    stream: ConsoleEntry['stream'] = 'system',
+  ): void {
     const entry: ConsoleEntry = {
       id: randomUUID(),
       timestamp: new Date().toISOString(),
       severity: severityFor(message),
       message,
       source,
+      stream,
     };
     const entries = [...(this.history.get(serverId) ?? []), entry].slice(-5000);
     this.history.set(serverId, entries);
-    this.events.emitConsole(serverId, entry);
+    const directory = this.store.get().servers.find((server) => server.id === serverId)?.directory;
+    if (directory) void this.consoleLogs.append(directory, entry).catch(() => undefined);
     this.updateLoadedModEvidence(serverId, message);
+    const detectedIssue = detectModIssue(message, this.loadedMods.get(serverId) ?? new Set());
+    if (directory && detectedIssue) {
+      void this.modIssues.record(directory, detectedIssue, this.diagnosticRunIds.get(serverId)).catch(() => undefined);
+    }
+    this.events.emitConsole(serverId, entry);
     void this.updatePlayerPresence(serverId, message);
     void this.updateListedPlayers(serverId, message);
     void this.updateRuntimeState(serverId, message);
@@ -92,6 +109,9 @@ export class ProcessManager {
     });
     if (detected.ready) {
       this.fabricModCaptures.delete(serverId);
+      const directory = this.store.get().servers.find((server) => server.id === serverId)?.directory;
+      const runId = this.diagnosticRunIds.get(serverId);
+      if (directory && runId) void this.modIssues.markNotSeenAfterStartup(directory, this.loadedMods.get(serverId) ?? new Set(), runId).catch(() => undefined);
       void this.refreshOnlinePlayers(serverId, true);
     }
   }
@@ -162,6 +182,9 @@ export class ProcessManager {
   async start(serverId: string): Promise<void> {
     if (this.runtimes.has(serverId)) return;
     const server = this.server(serverId);
+    const diagnosticRunId = randomUUID();
+    this.diagnosticRunIds.set(serverId, diagnosticRunId);
+    await this.modIssues.beginRun(server.directory, diagnosticRunId);
     this.loadedMods.delete(serverId);
     this.fabricModCaptures.delete(serverId);
     this.lastListRefreshAt.delete(serverId);
@@ -178,12 +201,12 @@ export class ProcessManager {
       state.players[serverId] = (state.players[serverId] ?? []).map((player) => ({ ...player, online: false }));
     });
 
-    const attach = (stream: NodeJS.ReadableStream) => {
-      const lines = createInterface({ input: stream });
-      lines.on('line', (line) => this.record(serverId, line));
+    const attach = (input: NodeJS.ReadableStream, stream: 'stdout' | 'stderr') => {
+      const lines = createInterface({ input });
+      lines.on('line', (line) => this.record(serverId, line, 'LIVE', stream));
     };
-    attach(child.stdout);
-    attach(child.stderr);
+    attach(child.stdout, 'stdout');
+    attach(child.stderr, 'stderr');
 
     child.once('spawn', async () => {
       await this.store.update((state) => {
@@ -261,19 +284,34 @@ export class ProcessManager {
       throw Object.assign(new Error('Invalid console command'), { statusCode: 400 });
     }
     runtime.process.stdin.write(`${command}\n`);
-    this.record(serverId, `> ${command}`);
+    this.record(serverId, `> ${command}`, 'LIVE', 'command');
   }
 
   getHistory(serverId: string): ConsoleEntry[] {
     return [...(this.history.get(serverId) ?? [])];
   }
 
-  clearHistory(serverId: string): void {
+  async readHistory(serverId: string, mode: import('../src/types/index.js').ConsoleViewMode = 'live'): Promise<ConsoleEntry[]> {
+    const server = this.server(serverId);
+    try {
+      return await this.consoleLogs.read(server.directory, mode);
+    } catch {
+      return this.getHistory(serverId);
+    }
+  }
+
+  async clearHistory(serverId: string): Promise<void> {
+    const server = this.server(serverId);
     this.history.set(serverId, []);
+    await this.consoleLogs.markCleared(server.directory);
   }
 
   loadedModIds(serverId: string): ReadonlySet<string> {
     return new Set(this.loadedMods.get(serverId) ?? []);
+  }
+
+  async getModIssues(serverId: string) {
+    return this.modIssues.list(this.server(serverId).directory);
   }
 
   onlinePlayers(serverId: string) {
@@ -419,5 +457,6 @@ export class ProcessManager {
 
   async shutdown(): Promise<void> {
     await Promise.all([...this.runtimes.keys()].map((id) => this.stop(id)));
+    await this.consoleLogs.flush();
   }
 }

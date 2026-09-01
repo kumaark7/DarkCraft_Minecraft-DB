@@ -28,6 +28,9 @@ import type {
   InstallableServerSoftware,
   SoftwareBuild,
   SoftwareCatalog,
+  MetricHistoryRange,
+  ServerMetricSample,
+  ModIssue,
 } from '@/types';
 
 // Server service
@@ -35,6 +38,7 @@ export interface IServerService {
   getServers(): Promise<Server[]>;
   getServer(id: string): Promise<Server | null>;
   getServerStats(id: string): Promise<ServerStats | null>;
+  getServerMetricHistory(id: string, range: MetricHistoryRange): Promise<ServerMetricSample[]>;
   startServer(id: string): Promise<void>;
   stopServer(id: string): Promise<void>;
   restartServer(id: string): Promise<void>;
@@ -100,6 +104,7 @@ export interface IFileService {
 export interface IPluginService {
   getPlugins(id: string): Promise<Plugin[]>;
   getMods(id: string): Promise<Mod[]>;
+  getModIssues(id: string): Promise<ModIssue[]>;
   uploadPlugin(id: string, file: File): Promise<void>;
   uploadMod(id: string, file: File): Promise<void>;
   downloadPlugin(id: string, filename: string): Promise<void>;
@@ -107,6 +112,7 @@ export interface IPluginService {
   deletePlugin(id: string, pluginId: string): Promise<void>;
   deleteMod(id: string, modId: string): Promise<void>;
   togglePlugin(id: string, pluginId: string, enabled: boolean): Promise<void>;
+  toggleMod(id: string, modId: string, enabled: boolean): Promise<void>;
 }
 
 // Backup service

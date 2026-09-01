@@ -116,6 +116,10 @@ Selected mock or real adapter
 
 The backend is included and covers the complete service interface. It stores runtime metadata under `.data/`, keeps authentication and hashed session data under ignored `.data/auth/`, confines Minecraft files to `MINECRAFT_SERVERS_ROOT`, and supports an enforced `DASHBOARD_READ_ONLY=true` mode.
 
+Minecraft stdout, stderr, commands, and DarkCraft process diagnostics are retained in each server's `.darkcraft/console/` directory. The active append-only log rotates into historical files instead of being truncated on server or dashboard restarts. Configure the active-file size with `DASHBOARD_CONSOLE_LOG_MAX_MB` and the number of retained rotated files with `DASHBOARD_CONSOLE_LOG_RETENTION_FILES`.
+
+Per-server runtime metric history and evidence-backed mod diagnostics are retained beneath each server's `.darkcraft/` directory. Metrics are sampled every 10 seconds, bounded to the latest 24 hours, and downsampled for graph responses. TPS, MSPT, and per-process network values remain unavailable until a reliable collector is configured.
+
 The Create Server wizard retrieves Vanilla, Paper, Purpur, Fabric, Forge, and NeoForge versions from their official metadata services. Metadata is cached under ignored `.data/catalog/`; **Refresh Versions** clears and rebuilds that cache. Server artifacts are downloaded only into the new server's `.data/servers/` directory, checked against published size/checksum data when available, and validated as JAR archives. Forge and NeoForge installers run in server-install mode, while Fabric uses its official executable server launcher. DarkCraft records compatible update availability but never upgrades an existing server automatically.
 
 For production, build with `VITE_DATA_SOURCE=real`, keep the backend bound to `127.0.0.1:8787`, and proxy both HTTP and WebSocket traffic through Nginx. Set `DASHBOARD_ALLOWED_ORIGINS=https://darkcraft.projectdarkhope.xyz` and leave `DASHBOARD_SECURE_COOKIES=true`. Nginx must preserve the `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` headers and forward WebSocket `Upgrade` and `Connection` headers.
