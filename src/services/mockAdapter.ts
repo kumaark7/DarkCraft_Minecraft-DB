@@ -72,12 +72,12 @@ setInterval(() => {
     const s = _stats[id];
     _stats[id] = {
       ...s,
-      cpu: Math.max(5, Math.min(95, s.cpu + (Math.random() - 0.5) * 8)),
-      ram: Math.max(512, Math.min(s.ramMax - 256, s.ram + (Math.random() - 0.5) * 200)),
-      networkIn: Math.max(0, s.networkIn + (Math.random() - 0.5) * 50),
-      networkOut: Math.max(0, s.networkOut + (Math.random() - 0.5) * 30),
-      tps: Math.max(15, Math.min(20, s.tps + (Math.random() - 0.5) * 0.4)),
-      mspt: Math.max(1, Math.min(20, s.mspt + (Math.random() - 0.5) * 1)),
+      cpu: Math.max(5, Math.min(95, (s.cpu ?? 0) + (Math.random() - 0.5) * 8)),
+      ram: Math.max(512, Math.min(s.ramMax - 256, (s.ram ?? 0) + (Math.random() - 0.5) * 200)),
+      networkIn: Math.max(0, (s.networkIn ?? 0) + (Math.random() - 0.5) * 50),
+      networkOut: Math.max(0, (s.networkOut ?? 0) + (Math.random() - 0.5) * 30),
+      tps: Math.max(15, Math.min(20, (s.tps ?? 20) + (Math.random() - 0.5) * 0.4)),
+      mspt: Math.max(1, Math.min(20, (s.mspt ?? 1) + (Math.random() - 0.5) * 1)),
       uptime: s.uptime + 2,
       timestamp: Date.now(),
     };
@@ -367,10 +367,20 @@ export const pluginService: IPluginService = {
     if (!_plugins[id]) _plugins[id] = [];
     _plugins[id].push({ id: `pl-${Date.now()}`, name: file.name.replace('.jar', ''), version: 'unknown', filename: file.name, size: file.size, status: 'enabled' });
   },
+  async uploadMod(id, file) {
+    await delay(1200);
+    if (!_mods[id]) _mods[id] = [];
+    _mods[id].push({ id: `md-${Date.now()}`, name: file.name.replace('.jar', ''), version: 'Unknown', filename: file.name, size: file.size, status: 'Unknown' });
+  },
   async downloadPlugin() { await delay(300); },
+  async downloadMod() { await delay(300); },
   async deletePlugin(id, pluginId) {
     await delay(300);
     _plugins[id] = (_plugins[id] ?? []).filter(p => p.id !== pluginId);
+  },
+  async deleteMod(id, modId) {
+    await delay(300);
+    _mods[id] = (_mods[id] ?? []).filter(mod => mod.id !== modId && mod.filename !== modId);
   },
   async togglePlugin(id, pluginId, enabled) {
     await delay(200);

@@ -36,7 +36,8 @@ export default function DashboardPage() {
   const online = servers.filter(s => s.status === 'ONLINE').length;
   const offline = servers.filter(s => s.status === 'OFFLINE' || s.status === 'CRASHED').length;
   const totalPlayers = servers.reduce((a, s) => a + s.playerCount, 0);
-  const avgCpu = online > 0 ? servers.filter(s => s.status === 'ONLINE').reduce((a, s) => a + s.cpu, 0) / online : 0;
+  const cpuReadings = servers.filter((server) => server.status === 'ONLINE' && server.cpu !== null).map((server) => server.cpu as number);
+  const avgCpu = cpuReadings.length ? cpuReadings.reduce((total, cpu) => total + cpu, 0) / cpuReadings.length : null;
 
   const recentActivity = activity.slice(0, 8);
 
@@ -60,9 +61,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <StatCard
             label="Avg CPU Usage"
-            value={`${avgCpu.toFixed(0)}%`}
+            value={avgCpu === null ? 'N/A' : `${avgCpu.toFixed(0)}%`}
             icon={<Cpu className="w-4 h-4" />}
-            highlight={avgCpu > 80 ? 'red' : avgCpu > 60 ? 'yellow' : undefined}
+            highlight={avgCpu !== null && avgCpu > 80 ? 'red' : avgCpu !== null && avgCpu > 60 ? 'yellow' : undefined}
           />
           <StatCard
             label="RAM Used (host)"

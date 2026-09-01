@@ -41,6 +41,8 @@ export default function ServerOverviewTab() {
 
   if (!server) return null;
   const isOnline = server.status === 'ONLINE';
+  const disk = stats?.disk ?? server.disk;
+  const diskMax = stats?.diskMax ?? server.diskMax;
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in">
@@ -50,76 +52,76 @@ export default function ServerOverviewTab() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatTile
             label="CPU"
-            value={isOnline && stats ? `${stats.cpu.toFixed(0)}%` : '—'}
-            sub={isOnline && stats ? undefined : 'Server offline'}
+            value={isOnline && stats?.cpu !== null && stats?.cpu !== undefined ? `${stats.cpu.toFixed(0)}%` : 'N/A'}
+            sub={!isOnline ? 'Server offline' : stats?.cpu === null ? 'Unavailable' : undefined}
             icon={<Cpu className="w-4 h-4" />}
-            color={stats && stats.cpu > 80 ? 'text-red-400' : stats && stats.cpu > 60 ? 'text-yellow-400' : undefined}
+            color={stats?.cpu !== null && stats?.cpu !== undefined && stats.cpu > 80 ? 'text-red-400' : stats?.cpu !== null && stats?.cpu !== undefined && stats.cpu > 60 ? 'text-yellow-400' : undefined}
           />
           <StatTile
             label="RAM"
-            value={isOnline && stats ? formatBytes(stats.ram * 1024 * 1024) : '—'}
-            sub={isOnline && stats ? `/ ${formatBytes(stats.ramMax * 1024 * 1024)}` : undefined}
+            value={isOnline && stats?.ram !== null && stats?.ram !== undefined ? formatBytes(stats.ram * 1024 * 1024) : 'N/A'}
+            sub={isOnline && stats?.ram !== null && stats?.ram !== undefined ? `/ ${formatBytes(stats.ramMax * 1024 * 1024)}` : undefined}
             icon={<MemoryStick className="w-4 h-4" />}
           />
           <StatTile
             label="Players"
-            value={isOnline ? `${server.playerCount}/${server.maxPlayers}` : '—'}
+            value={isOnline ? `${server.playerCount}/${server.maxPlayers}` : 'N/A'}
             icon={<Users className="w-4 h-4" />}
             color={server.playerCount > 0 ? 'text-primary' : undefined}
           />
           <StatTile
             label="Uptime"
-            value={isOnline ? formatUptime(server.uptime) : '—'}
+            value={isOnline ? formatUptime(server.uptime) : 'N/A'}
             icon={<Clock className="w-4 h-4" />}
           />
         </div>
-        {isOnline && stats && (
+        {stats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
             <StatTile
               label="TPS"
-              value={stats.tps.toFixed(1)}
-              sub="target: 20"
+              value={stats.tps === null ? 'N/A' : stats.tps.toFixed(1)}
+              sub={stats.tps === null ? 'Unavailable' : 'target: 20'}
               icon={<Zap className="w-4 h-4" />}
-              color={stats.tps < 18 ? 'text-yellow-400' : stats.tps < 15 ? 'text-red-400' : 'text-primary'}
+              color={stats.tps !== null && stats.tps < 15 ? 'text-red-400' : stats.tps !== null && stats.tps < 18 ? 'text-yellow-400' : stats.tps !== null ? 'text-primary' : undefined}
             />
             <StatTile
               label="MSPT"
-              value={`${stats.mspt.toFixed(1)}ms`}
-              sub="target: <50ms"
+              value={stats.mspt === null ? 'N/A' : `${stats.mspt.toFixed(1)}ms`}
+              sub={stats.mspt === null ? 'Unavailable' : 'target: <50ms'}
               icon={<Activity className="w-4 h-4" />}
             />
             <StatTile
               label="Net In"
-              value={formatBytes(stats.networkIn * 1024) + '/s'}
+              value={stats.networkIn === null ? 'N/A' : `${formatBytes(stats.networkIn * 1024)}/s`}
               icon={<Network className="w-4 h-4" />}
             />
             <StatTile
               label="Disk"
-              value={formatBytes(server.disk * 1024 * 1024)}
-              sub={`/ ${formatBytes(server.diskMax * 1024 * 1024)}`}
+              value={disk === null ? 'N/A' : formatBytes(disk * 1024 * 1024)}
+              sub={diskMax === null ? 'Capacity unavailable' : `/ ${formatBytes(diskMax * 1024 * 1024)}`}
               icon={<HardDrive className="w-4 h-4" />}
             />
           </div>
         )}
-        {isOnline && stats && (
+        {stats && (
           <div className="mt-3 space-y-1.5">
             <div className="flex items-center gap-2 text-xs">
               <Cpu className="w-3 h-3 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground w-8 shrink-0">CPU</span>
-              <ProgressBar value={stats.cpu} className="flex-1" />
-              <span className="text-foreground w-10 text-right">{stats.cpu.toFixed(0)}%</span>
+              {stats.cpu === null ? <span className="flex-1 text-muted-foreground">N/A</span> : <ProgressBar value={stats.cpu} className="flex-1" />}
+              <span className="text-foreground w-10 text-right">{stats.cpu === null ? 'N/A' : `${stats.cpu.toFixed(0)}%`}</span>
             </div>
             <div className="flex items-center gap-2 text-xs">
               <MemoryStick className="w-3 h-3 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground w-8 shrink-0">RAM</span>
-              <ProgressBar value={stats.ram} max={stats.ramMax} className="flex-1" />
-              <span className="text-foreground w-10 text-right">{((stats.ram / stats.ramMax) * 100).toFixed(0)}%</span>
+              {stats.ram === null ? <span className="flex-1 text-muted-foreground">N/A</span> : <ProgressBar value={stats.ram} max={stats.ramMax} className="flex-1" />}
+              <span className="text-foreground w-10 text-right">{stats.ram === null ? 'N/A' : `${((stats.ram / stats.ramMax) * 100).toFixed(0)}%`}</span>
             </div>
             <div className="flex items-center gap-2 text-xs">
               <HardDrive className="w-3 h-3 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground w-8 shrink-0">Disk</span>
-              <ProgressBar value={server.disk} max={server.diskMax} className="flex-1" />
-              <span className="text-foreground w-10 text-right">{((server.disk / server.diskMax) * 100).toFixed(0)}%</span>
+              {disk === null || diskMax === null || diskMax <= 0 ? <span className="flex-1 text-muted-foreground">N/A</span> : <ProgressBar value={disk} max={diskMax} className="flex-1" />}
+              <span className="text-foreground w-10 text-right">{disk === null || diskMax === null || diskMax <= 0 ? 'N/A' : `${((disk / diskMax) * 100).toFixed(0)}%`}</span>
             </div>
           </div>
         )}
@@ -137,9 +139,9 @@ export default function ServerOverviewTab() {
             <InfoRow label="Address" value={`${server.ip}:${server.port}`} />
             <InfoRow label="Minecraft Version" value={server.minecraftVersion} />
             <InfoRow label="Server Software" value={server.software} />
-            <InfoRow label="Java Version" value={server.javaVersion} />
+            <InfoRow label="Java Version" value={server.javaVersion || 'N/A'} />
             <InfoRow label="Process Status" value={server.status} />
-            {server.pid && <InfoRow label="PID" value={String(server.pid)} />}
+            <InfoRow label="PID" value={server.pid ? String(server.pid) : 'N/A'} />
           </div>
         </div>
 

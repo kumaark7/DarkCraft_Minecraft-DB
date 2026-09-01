@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -6,6 +6,7 @@ import { buildApp } from './app.js';
 import type { BackendConfig } from './config.js';
 import { totpAt } from './authCrypto.js';
 import AdmZip from 'adm-zip';
+import type { ManagedServer } from './types.js';
 
 const temporary: string[] = [];
 afterEach(async () => Promise.all(temporary.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
@@ -49,6 +50,40 @@ describe('backend API guarantees', () => {
     expect(created.statusCode).toBe(201); const id = created.json().data.id as string;
     const traversal = await context.app.inject({ method: 'GET', url: `/api/v1/servers/${id}/files/content?path=%252e%252e%252fsecret`, headers: { cookie: headers.cookie } });
     expect(traversal.statusCode).toBe(400);
+    await context.app.close();
+  });
+
+  it('serves mod metadata and Minecraft player JSON instead of stale dashboard values', async () => {
+    const cfg = await config(false); const context = await buildApp(cfg);
+    const headers = await authenticate(context);
+    const directory = path.join(cfg.serversRoot, 'real-data');
+    await mkdir(path.join(directory, 'mods'), { recursive: true });
+    const modJar = new AdmZip();
+    modJar.addFile('fabric.mod.json', Buffer.from(JSON.stringify({ id: 'real-mod', name: 'Real Mod', version: '3.1.4', depends: { minecraft: '>=26.2 <27' } })));
+    await writeFile(path.join(directory, 'mods', 'real-mod.jar'), modJar.toBuffer());
+    await writeFile(path.join(directory, 'usercache.json'), JSON.stringify([{ name: 'Steve', uuid: 'uuid-steve' }]));
+    await writeFile(path.join(directory, 'ops.json'), JSON.stringify([{ name: 'Steve', uuid: 'uuid-steve', level: 4 }]));
+    await writeFile(path.join(directory, 'whitelist.json'), '[]');
+    await writeFile(path.join(directory, 'banned-players.json'), '[]');
+    await writeFile(path.join(directory, 'banned-ips.json'), JSON.stringify([{ ip: '192.0.2.25', source: 'Admin', reason: 'Spam', created: '2026-09-02 00:00:00 +0000' }]));
+    const server: ManagedServer = {
+      id: 'real-data', name: 'Real Data', status: 'OFFLINE', software: 'Fabric', minecraftVersion: '26.2', javaVersion: 'Java 21',
+      ip: '0.0.0.0', port: 25565, playerCount: 1, maxPlayers: 20, cpu: null, ram: null, ramMax: 4096,
+      disk: null, diskMax: null, uptime: 0, directory, startupCommand: 'java -jar fabric.jar nogui', startupExecutable: 'java',
+      startupArgs: ['-jar', 'fabric.jar', 'nogui'], createdAt: new Date().toISOString(),
+    };
+    await context.store.update((state) => {
+      state.servers.push(server);
+      state.players[server.id] = [{ username: 'StaleOnline', uuid: 'stale', online: true, isOp: true, isWhitelisted: true, isBanned: true }];
+      state.bannedIPs[server.id] = [{ ip: '198.51.100.1', reason: 'Stale', bannedBy: 'Cache', date: '' }];
+    });
+
+    const players = await context.app.inject({ method: 'GET', url: '/api/v1/servers/real-data/players', headers: { cookie: headers.cookie } });
+    const bannedIps = await context.app.inject({ method: 'GET', url: '/api/v1/servers/real-data/banned-ips', headers: { cookie: headers.cookie } });
+    const mods = await context.app.inject({ method: 'GET', url: '/api/v1/servers/real-data/mods', headers: { cookie: headers.cookie } });
+    expect(players.json().data).toEqual([expect.objectContaining({ username: 'Steve', uuid: 'uuid-steve', online: false, isOp: true })]);
+    expect(bannedIps.json().data).toEqual([{ ip: '192.0.2.25', reason: 'Spam', bannedBy: 'Admin', date: '2026-09-02 00:00:00 +0000' }]);
+    expect(mods.json().data).toEqual([expect.objectContaining({ id: 'real-mod', name: 'Real Mod', version: '3.1.4', size: expect.any(Number), loader: 'Fabric', minecraftCompatibility: '>=26.2 <27', status: 'Unknown' })]);
     await context.app.close();
   });
 });

@@ -109,7 +109,7 @@ export default function ServersPage() {
       if (sortKey === 'name') return a.name.localeCompare(b.name);
       if (sortKey === 'status') return a.status.localeCompare(b.status);
       if (sortKey === 'players') return b.playerCount - a.playerCount;
-      if (sortKey === 'cpu') return b.cpu - a.cpu;
+      if (sortKey === 'cpu') return (b.cpu ?? -1) - (a.cpu ?? -1);
       return 0;
     });
 
@@ -266,17 +266,17 @@ export default function ServersPage() {
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        {server.status === 'ONLINE' ? (
+                        {server.status === 'ONLINE' && server.cpu !== null ? (
                           <div className="flex items-center gap-1.5">
                             <span className={server.cpu > 80 ? 'text-red-400' : server.cpu > 60 ? 'text-yellow-400' : 'text-foreground'}>
                               {server.cpu.toFixed(0)}%
                             </span>
                             <ProgressBar value={server.cpu} size="sm" className="w-14" />
                           </div>
-                        ) : <span className="text-muted-foreground">—</span>}
+                        ) : <span className="text-muted-foreground">N/A</span>}
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {server.status === 'ONLINE' ? formatBytes(server.ram * 1024 * 1024) : '—'}
+                        {server.status === 'ONLINE' && server.ram !== null ? formatBytes(server.ram * 1024 * 1024) : 'N/A'}
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
                         {server.status === 'ONLINE' ? formatUptime(server.uptime) : '—'}
@@ -378,13 +378,13 @@ function ServerCardFull({ server, onStart, onStop, onRestart, onKill, onExport, 
         <div><p className="text-muted-foreground">Players</p><p className="font-medium text-foreground">{server.playerCount}/{server.maxPlayers}</p></div>
         <div>
           <p className="text-muted-foreground">CPU</p>
-          <p className={cn('font-medium', server.cpu > 80 ? 'text-red-400' : server.cpu > 60 ? 'text-yellow-400' : 'text-foreground')}>
-            {server.status === 'ONLINE' ? `${server.cpu.toFixed(0)}%` : '—'}
+          <p className={cn('font-medium', server.cpu !== null && server.cpu > 80 ? 'text-red-400' : server.cpu !== null && server.cpu > 60 ? 'text-yellow-400' : 'text-foreground')}>
+            {server.status === 'ONLINE' && server.cpu !== null ? `${server.cpu.toFixed(0)}%` : 'N/A'}
           </p>
         </div>
         <div>
           <p className="text-muted-foreground">RAM</p>
-          <p className="font-medium text-foreground">{server.status === 'ONLINE' ? formatBytes(server.ram * 1024 * 1024) : '—'}</p>
+          <p className="font-medium text-foreground">{server.status === 'ONLINE' && server.ram !== null ? formatBytes(server.ram * 1024 * 1024) : 'N/A'}</p>
         </div>
       </div>
 

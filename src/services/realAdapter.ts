@@ -61,8 +61,13 @@ export function createRealServices(client: ApiClient) {
   };
   const pluginService: IPluginService = {
     getPlugins: (id) => client.get<Plugin[]>(safeServerPath(id, '/plugins')), getMods: (id) => client.get<Mod[]>(safeServerPath(id, '/mods')),
-    uploadPlugin: (id, file) => client.upload(safeServerPath(id, '/plugins/upload'), file), downloadPlugin: (id, filename) => client.download(safeServerPath(id, `/files/download`), filename, { path: normalizeServerPath(`/plugins/${filename}`) }),
-    deletePlugin: (id, pluginId) => client.delete(safeServerPath(id, `/plugins/${encodeURIComponent(pluginId)}`)), togglePlugin: (id, pluginId, enabled) => client.post(safeServerPath(id, `/plugins/${encodeURIComponent(pluginId)}/toggle`), { enabled }),
+    uploadPlugin: (id, file) => client.upload(safeServerPath(id, '/plugins/upload'), file),
+    uploadMod: (id, file) => client.upload(safeServerPath(id, '/mods/upload'), file),
+    downloadPlugin: (id, filename) => client.download(safeServerPath(id, '/files/download'), filename, { path: normalizeServerPath(`/plugins/${filename}`) }),
+    downloadMod: (id, filename) => client.download(safeServerPath(id, '/files/download'), filename, { path: normalizeServerPath(`/mods/${filename}`) }),
+    deletePlugin: (id, pluginId) => client.delete(safeServerPath(id, `/plugins/${encodeURIComponent(pluginId)}`)),
+    deleteMod: (id, modId) => client.delete(safeServerPath(id, `/mods/${encodeURIComponent(modId)}`)),
+    togglePlugin: (id, pluginId, enabled) => client.post(safeServerPath(id, `/plugins/${encodeURIComponent(pluginId)}/toggle`), { enabled }),
   };
   const backupService: IBackupService = {
     getBackups: (id) => client.get<Backup[]>(safeServerPath(id, '/backups')),

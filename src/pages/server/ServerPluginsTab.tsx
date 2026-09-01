@@ -5,10 +5,16 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EmptyState, LoadingState } from '@/components/shared/States';
 import { pluginService } from '@/services';
-import { formatBytes } from '@/utils';
+import { cn, formatBytes } from '@/utils';
 import { useServer } from '@/hooks/useServers';
 import { toast } from 'sonner';
 import type { Plugin, Mod } from '@/types';
+
+function modStatusColor(status: Mod['status']): string {
+  if (status === 'Active') return 'text-primary';
+  if (status === 'Disabled' || status === 'Unknown') return 'text-muted-foreground';
+  return 'text-yellow-400';
+}
 
 export default function ServerPluginsTab() {
   const { id } = useParams<{ id: string }>();
@@ -38,14 +44,16 @@ export default function ServerPluginsTab() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    await pluginService.uploadPlugin(id!, file);
-    toast.success(`${file.name} uploaded`);
+    if (isModServer) await pluginService.uploadMod(id!, file);
+    else await pluginService.uploadPlugin(id!, file);
+    toast.success(`${file.name} uploaded${isModServer ? '; restart the server to activate it' : ''}`);
     load();
     e.target.value = '';
   };
 
   const handleDelete = async (plugin: Plugin) => {
-    await pluginService.deletePlugin(id!, plugin.id);
+    if (isModServer) await pluginService.deleteMod(id!, plugin.filename);
+    else await pluginService.deletePlugin(id!, plugin.id);
     toast.success(`${plugin.name} deleted`);
     setDeleteTarget(null);
     load();
@@ -95,15 +103,18 @@ export default function ServerPluginsTab() {
                 <tr className="border-b border-border">
                   <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Name</th>
                   <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Version</th>
+                  {isModServer && <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Loader</th>}
+                  {isModServer && <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Minecraft</th>}
                   <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">File</th>
                   <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Size</th>
-                  {!isModServer && <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>}
+                  <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
                   <th className="px-4 py-2.5"></th>
                 </tr>
               </thead>
               <tbody>
                 {items.map(item => {
                   const p = item as Plugin;
+                  const mod = item as Mod;
                   return (
                     <tr key={p.id ?? item.filename} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-2.5">
@@ -113,10 +124,14 @@ export default function ServerPluginsTab() {
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">{item.version}</td>
+                      {isModServer && <td className="px-4 py-2.5 text-muted-foreground">{mod.loader ?? 'Unknown'}</td>}
+                      {isModServer && <td className="px-4 py-2.5 text-muted-foreground font-mono">{mod.minecraftCompatibility ?? 'Unknown'}</td>}
                       <td className="px-4 py-2.5 text-muted-foreground font-mono">{item.filename}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{item.size ? formatBytes(item.size) : '—'}</td>
-                      {!isModServer && (
-                        <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5">
+                        {isModServer ? (
+                          <span title={mod.inspectionError} className={cn('text-[10px] font-medium', modStatusColor(mod.status))}>{mod.status}</span>
+                        ) : (
                           <button onClick={() => handleToggle(p)} className="flex items-center gap-1.5">
                             {p.status === 'enabled' ? (
                               <><ToggleRight className="w-5 h-5 text-primary" /><span className="text-primary text-[10px]">Enabled</span></>
@@ -124,11 +139,11 @@ export default function ServerPluginsTab() {
                               <><ToggleLeft className="w-5 h-5 text-muted-foreground" /><span className="text-muted-foreground text-[10px]">Disabled</span></>
                             )}
                           </button>
-                        </td>
-                      )}
+                        )}
+                      </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-0.5">
-                          <Button size="sm" variant="ghost" className="h-6 w-6 px-0" onClick={() => pluginService.downloadPlugin(id!, item.filename)}>
+                          <Button size="sm" variant="ghost" className="h-6 w-6 px-0" onClick={() => isModServer ? pluginService.downloadMod(id!, item.filename) : pluginService.downloadPlugin(id!, item.filename)}>
                             <Download className="w-3 h-3" />
                           </Button>
                           {!isModServer && (

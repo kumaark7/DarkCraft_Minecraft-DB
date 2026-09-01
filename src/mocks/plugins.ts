@@ -15,15 +15,15 @@ export const MOCK_PLUGINS: Record<string, Plugin[]> = {
 
 export const MOCK_MODS: Record<string, Mod[]> = {
   'server-3': [
-    { id: 'md-1', name: 'Fabric API', version: '0.100.4', filename: 'fabric-api-0.100.4.jar', size: 2048000, description: 'Core Fabric API', author: 'FabricMC' },
-    { id: 'md-2', name: 'Sodium', version: '0.5.11', filename: 'sodium-0.5.11.jar', size: 1024000, description: 'Modern rendering engine replacement', author: 'JellySquid3' },
-    { id: 'md-3', name: 'Lithium', version: '0.12.1', filename: 'lithium-0.12.1.jar', size: 512000, description: 'Game logic optimization mod', author: 'CaffeineMC' },
-    { id: 'md-4', name: 'Create', version: '0.5.1f', filename: 'create-0.5.1f.jar', size: 4096000, description: 'Factory machines and automation', author: 'SimplyMiPri' },
+    { id: 'md-1', name: 'Fabric API', version: '0.100.4', filename: 'fabric-api-0.100.4.jar', size: 2048000, status: 'Active', loader: 'Fabric', description: 'Core Fabric API', author: 'FabricMC' },
+    { id: 'md-2', name: 'Sodium', version: '0.5.11', filename: 'sodium-0.5.11.jar', size: 1024000, status: 'Active', loader: 'Fabric', description: 'Modern rendering engine replacement', author: 'JellySquid3' },
+    { id: 'md-3', name: 'Lithium', version: '0.12.1', filename: 'lithium-0.12.1.jar', size: 512000, status: 'Active', loader: 'Fabric', description: 'Game logic optimization mod', author: 'CaffeineMC' },
+    { id: 'md-4', name: 'Create', version: '0.5.1f', filename: 'create-0.5.1f.jar', size: 4096000, status: 'Active', loader: 'Fabric', description: 'Factory machines and automation', author: 'SimplyMiPri' },
   ],
   'server-4': [
-    { id: 'md-5', name: 'Forge', version: '47.2.0', filename: 'forge-47.2.0-universal.jar', size: 3000000, description: 'Minecraft Forge core', author: 'Forge Team' },
-    { id: 'md-6', name: 'Applied Energistics 2', version: '15.0.9', filename: 'appliedenergistics2-15.0.9.jar', size: 6144000, description: 'Storage, processing and transport networks', author: 'TeamAE2' },
-    { id: 'md-7', name: 'Mekanism', version: '10.4.4', filename: 'Mekanism-10.4.4.jar', size: 5120000, description: 'Energy, fluid and item transport', author: 'aidancbrady' },
-    { id: 'md-8', name: 'Thermal Expansion', version: '10.2.1', filename: 'ThermalExpansion-10.2.1.jar', size: 4608000, description: 'Thermal Expansion mod', author: 'TeamCoFH' },
+    { id: 'md-5', name: 'Forge', version: '47.2.0', filename: 'forge-47.2.0-universal.jar', size: 3000000, status: 'Active', loader: 'Forge', description: 'Minecraft Forge core', author: 'Forge Team' },
+    { id: 'md-6', name: 'Applied Energistics 2', version: '15.0.9', filename: 'appliedenergistics2-15.0.9.jar', size: 6144000, status: 'Active', loader: 'Forge', description: 'Storage, processing and transport networks', author: 'TeamAE2' },
+    { id: 'md-7', name: 'Mekanism', version: '10.4.4', filename: 'Mekanism-10.4.4.jar', size: 5120000, status: 'Active', loader: 'Forge', description: 'Energy, fluid and item transport', author: 'aidancbrady' },
+    { id: 'md-8', name: 'Thermal Expansion', version: '10.2.1', filename: 'ThermalExpansion-10.2.1.jar', size: 4608000, status: 'Active', loader: 'Forge', description: 'Thermal Expansion mod', author: 'TeamCoFH' },
   ],
 };

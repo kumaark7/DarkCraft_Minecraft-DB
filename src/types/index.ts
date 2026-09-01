@@ -69,11 +69,11 @@ export interface Server {
   port: number;
   playerCount: number;
   maxPlayers: number;
-  cpu: number; // percentage 0-100
-  ram: number; // MB used
+  cpu: number | null; // percentage 0-100; null when unavailable
+  ram: number | null; // MB used; null when unavailable
   ramMax: number; // MB max
-  disk: number; // MB used
-  diskMax: number; // MB total
+  disk: number | null; // MB used; null when unavailable
+  diskMax: number | null; // MB total; null when unavailable
   uptime: number; // seconds
   pid?: number;
   directory: string;
@@ -86,18 +86,18 @@ export interface Server {
 
 export interface ServerStats {
   serverId: string;
-  cpu: number;
-  ram: number;
+  cpu: number | null;
+  ram: number | null;
   ramMax: number;
-  disk: number;
-  diskMax: number;
-  networkIn: number; // KB/s
-  networkOut: number; // KB/s
+  disk: number | null;
+  diskMax: number | null;
+  networkIn: number | null; // KB/s; null when per-process counters are unavailable
+  networkOut: number | null; // KB/s; null when per-process counters are unavailable
   players: number;
   maxPlayers: number;
   uptime: number;
-  tps: number;
-  mspt: number;
+  tps: number | null;
+  mspt: number | null;
   timestamp: number;
 }
 
@@ -199,6 +199,7 @@ export interface ServerFile {
 // ============================================================
 
 export type PluginStatus = 'enabled' | 'disabled';
+export type ModStatus = 'Active' | 'Disabled' | 'Version Issue' | 'Wrong Loader' | 'Invalid JAR' | 'Unknown';
 
 export interface Plugin {
   id: string;
@@ -217,6 +218,10 @@ export interface Mod {
   version: string;
   filename: string;
   size: number; // bytes
+  status: ModStatus;
+  loader?: string;
+  minecraftCompatibility?: string;
+  inspectionError?: string;
   description?: string;
   author?: string;
 }

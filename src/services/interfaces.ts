@@ -101,8 +101,11 @@ export interface IPluginService {
   getPlugins(id: string): Promise<Plugin[]>;
   getMods(id: string): Promise<Mod[]>;
   uploadPlugin(id: string, file: File): Promise<void>;
+  uploadMod(id: string, file: File): Promise<void>;
   downloadPlugin(id: string, filename: string): Promise<void>;
+  downloadMod(id: string, filename: string): Promise<void>;
   deletePlugin(id: string, pluginId: string): Promise<void>;
+  deleteMod(id: string, modId: string): Promise<void>;
   togglePlugin(id: string, pluginId: string, enabled: boolean): Promise<void>;
 }
 

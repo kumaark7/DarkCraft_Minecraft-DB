@@ -4,15 +4,25 @@ import type { Player, BannedIP } from '@/types';
 
 export function usePlayers(serverId: string) {
   const [players, setPlayers] = useState<Player[]>([]);
+  const [bannedIPs, setBannedIPs] = useState<BannedIP[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    const data = await playerService.getPlayers(serverId);
+  const load = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    const [data, banned] = await Promise.all([
+      playerService.getPlayers(serverId),
+      playerService.getBannedIPs(serverId),
+    ]);
     setPlayers(data);
+    setBannedIPs(banned);
     setLoading(false);
   }, [serverId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load(true);
+    const timer = setInterval(() => { void load(); }, 3000);
+    return () => clearInterval(timer);
+  }, [load]);
 
   const kick = useCallback(async (username: string, reason?: string) => {
     await playerService.kickPlayer(serverId, username, reason);
@@ -48,9 +58,6 @@ export function usePlayers(serverId: string) {
     await playerService.removeWhitelistPlayer(serverId, username);
     await load();
   }, [serverId, load]);
-
-  const [bannedIPs, setBannedIPs] = useState<BannedIP[]>([]);
-  useEffect(() => { playerService.getBannedIPs(serverId).then(setBannedIPs); }, [serverId]);
 
   const unbanIP = useCallback(async (ip: string) => {
     await playerService.unbanIP(serverId, ip);

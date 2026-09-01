@@ -62,14 +62,14 @@ export function ServerCard({ server, onStart, onStop, onRestart, onKill, onDelet
             </div>
             <div>
               <p className="text-muted-foreground">CPU</p>
-              <p className={cn('font-medium', server.cpu > 80 ? 'text-red-400' : server.cpu > 60 ? 'text-yellow-400' : 'text-foreground')}>
-                {server.status === 'ONLINE' ? `${server.cpu.toFixed(0)}%` : '—'}
+              <p className={cn('font-medium', server.cpu !== null && server.cpu > 80 ? 'text-red-400' : server.cpu !== null && server.cpu > 60 ? 'text-yellow-400' : 'text-foreground')}>
+                {server.status === 'ONLINE' && server.cpu !== null ? `${server.cpu.toFixed(0)}%` : 'N/A'}
               </p>
             </div>
             <div>
               <p className="text-muted-foreground">RAM</p>
               <p className="font-medium text-foreground">
-                {server.status === 'ONLINE' ? formatBytes(server.ram * 1024 * 1024) : '—'}
+                {server.status === 'ONLINE' && server.ram !== null ? formatBytes(server.ram * 1024 * 1024) : 'N/A'}
               </p>
             </div>
           </div>

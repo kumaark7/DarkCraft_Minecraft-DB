@@ -55,6 +55,8 @@ import {
   parseServerProperties,
   updateServerPropertiesFile,
 } from './serverProperties.js';
+import { inspectModJar, inspectPluginJar } from './jarMetadata.js';
+import { readBannedIps, readPlayers } from './playerData.js';
 
 interface AppContext {
   app: FastifyInstance;
@@ -230,8 +232,16 @@ function registerReadRoutes(context: AppContext): void {
     return ok(parseServerProperties(content, { serverId: id, serverName: server.name }));
   });
   app.get('/api/v1/servers/:id/console', async (request) => ok(processes.getHistory(params(request).id ?? '')));
-  app.get('/api/v1/servers/:id/players', async (request) => ok(store.get().players[params(request).id ?? ''] ?? []));
-  app.get('/api/v1/servers/:id/banned-ips', async (request) => ok(store.get().bannedIPs[params(request).id ?? ''] ?? []));
+  app.get('/api/v1/servers/:id/players', async (request) => {
+    const id = params(request).id ?? '';
+    const root = await serverPath(context, id, '/');
+    await processes.refreshOnlinePlayers(id);
+    return ok(await readPlayers(root, processes.onlinePlayers(id)));
+  });
+  app.get('/api/v1/servers/:id/banned-ips', async (request) => {
+    const id = params(request).id ?? '';
+    return ok(await readBannedIps(await serverPath(context, id, '/')));
+  });
   app.get('/api/v1/servers/:id/files', async (request) => {
     const id = params(request).id ?? '';
     const root = await serverPath(context, id, '/');
@@ -239,8 +249,8 @@ function registerReadRoutes(context: AppContext): void {
   });
   app.get('/api/v1/servers/:id/files/content', async (request) => ok(await readFile(await serverPath(context, params(request).id ?? '', query(request).path ?? ''), 'utf8')));
   app.get('/api/v1/servers/:id/files/download', async (request, reply) => sendDownload(reply, await serverPath(context, params(request).id ?? '', query(request).path ?? '')));
-  app.get('/api/v1/servers/:id/plugins', async (request) => ok(await jars(context, params(request).id ?? '', '/plugins')));
-  app.get('/api/v1/servers/:id/mods', async (request) => ok(await jars(context, params(request).id ?? '', '/mods')));
+  app.get('/api/v1/servers/:id/plugins', async (request) => ok(await jars(context, params(request).id ?? '', 'plugins')));
+  app.get('/api/v1/servers/:id/mods', async (request) => ok(await jars(context, params(request).id ?? '', 'mods')));
   app.get('/api/v1/servers/:id/backups', async (request) => ok(store.get().backups[params(request).id ?? ''] ?? []));
   app.get('/api/v1/servers/:id/backups/:backupId/download', async (request, reply) => {
     const p = params(request); const backup = (store.get().backups[p.id ?? ''] ?? []).find((item) => item.id === p.backupId);
@@ -262,12 +272,17 @@ function registerReadRoutes(context: AppContext): void {
   });
 }
 
-async function jars(context: AppContext, id: string, directory: string) {
-  const root = await serverPath(context, id, directory);
+async function jars(context: AppContext, id: string, type: 'plugins' | 'mods') {
+  const server = serverById(context.store.get(), id);
+  const root = await serverPath(context, id, `/${type}`);
   if (!existsSync(root)) return [];
-  return (await readdir(root, { withFileTypes: true })).filter((item) => item.isFile() && /\.jar(?:\.disabled)?$/i.test(item.name)).map((item) => ({
-    id: item.name, name: item.name.replace(/\.jar(?:\.disabled)?$/i, ''), version: 'unknown', filename: item.name,
-    size: 0, status: item.name.endsWith('.disabled') ? 'disabled' : 'enabled',
+  const files = (await readdir(root, { withFileTypes: true }))
+    .filter((item) => item.isFile() && /\.jar(?:\.disabled)?$/i.test(item.name));
+  return Promise.all(files.map((item) => {
+    const filePath = path.join(root, item.name);
+    return type === 'mods'
+      ? inspectModJar(filePath, server.software, server.minecraftVersion, context.processes.loadedModIds(id))
+      : inspectPluginJar(filePath);
   }));
 }
 
@@ -460,6 +475,7 @@ function registerPluginWrites(context: AppContext): void {
     app.post(`/api/v1/servers/:id/${type}/upload`, async (request) => { writable(config); const part = await request.file(); if (!part || !part.filename.endsWith('.jar')) throw Object.assign(new Error('A JAR file is required'), { statusCode: 400 }); const root = await serverPath(context, params(request).id ?? '', `/${type}`); await mkdir(root, { recursive: true }); await pipeline(part.file, (await import('node:fs')).createWriteStream(await resolveInside(root, `/${assertFileName(part.filename)}`), { flags: 'wx' })); return ok(null); });
   }
   app.delete('/api/v1/servers/:id/plugins/:pluginId', async (request) => { writable(config); const p = params(request); await rm(await serverPath(context, p.id ?? '', `/plugins/${assertFileName(p.pluginId ?? '')}`), { force: true }); return ok(null); });
+  app.delete('/api/v1/servers/:id/mods/:modId', async (request) => { writable(config); const p = params(request); await rm(await serverPath(context, p.id ?? '', `/mods/${assertFileName(p.modId ?? '')}`), { force: true }); return ok(null); });
   app.post('/api/v1/servers/:id/plugins/:pluginId/toggle', async (request) => { writable(config); const p = params(request); const enabled = body<{ enabled: boolean }>(request).enabled; const file = assertFileName(p.pluginId ?? ''); const current = await serverPath(context, p.id ?? '', `/plugins/${file}`); const desired = enabled ? file.replace(/\.disabled$/, '') : file.endsWith('.disabled') ? file : `${file}.disabled`; await rename(current, await serverPath(context, p.id ?? '', `/plugins/${desired}`)); return ok(null); });
 }
 
