@@ -37,6 +37,7 @@ describe('managed Minecraft runtime', () => {
       "console.error('[Server thread/WARN]: stderr diagnostic')",
       "console.log('[Server thread/INFO]: Steve joined the game')",
       "setTimeout(() => console.log('[Server thread/INFO]: Done (1.00s)! For help, type \\\"help\\\"'), 50)",
+      "process.stdin.on('data', data => { if (String(data).includes('spark tps')) { console.log('[Server thread/INFO]: [⚡] TPS from last 5s, 10s, 1m, 5m, 15m:'); console.log('[Server thread/INFO]: [⚡] 19.5, 19.6, 19.7, 19.8, 19.9'); console.log('[Server thread/INFO]: [⚡] Tick durations (min/med/95%ile/max ms) from last 10s, 1m:'); console.log('[Server thread/INFO]: [⚡] 1.0/4.0/9.0/15.0; 1.0/5.0/10.0/20.0'); } })",
       "let listRequests = 0; process.stdin.on('data', data => { if (String(data).includes('list')) { console.log('List request ' + (++listRequests)); console.log('[Server thread/INFO]: There are 2 of a max of 42 players online: Steve, Alex') } })",
       'setInterval(() => {}, 1000)',
     ].join(';');
@@ -57,13 +58,14 @@ describe('managed Minecraft runtime', () => {
     await Promise.all([manager.refreshOnlinePlayers(server.id), manager.refreshOnlinePlayers(server.id), manager.refreshOnlinePlayers(server.id)]);
     expect(manager.getHistory(server.id).filter((entry) => entry.message.startsWith('List request '))).toHaveLength(1);
     expect([...manager.loadedModIds(server.id)]).toEqual(['dark-example', 'fabric-api']);
+    await waitFor(() => manager.getHistory(server.id).some(entry => entry.message.includes('1.0/4.0/9.0/15.0')));
     const snapshot = await manager.serverSnapshot(server.id);
     expect(snapshot).toMatchObject({ status: 'ONLINE', software: 'Paper', minecraftVersion: '26.2', javaVersion: 'Java 25', playerCount: 2, maxPlayers: 42, ip: '127.0.0.1', port: 25570, cpu: 12.5, ram: 256 });
     expect(snapshot?.pid).toBeTypeOf('number');
     expect(snapshot?.disk).toBeGreaterThan(0);
     expect(snapshot?.diskMax).toBeGreaterThan(0);
     const stats = await manager.stats(server.id);
-    expect(stats).toMatchObject({ networkIn: null, networkOut: null, tps: null, mspt: null, players: 2, maxPlayers: 42 });
+    expect(stats).toMatchObject({ networkIn: null, networkOut: null, tps: 19.5, mspt: 4, tpsSource: 'spark-5s', msptSource: 'spark-median-10s', players: 2, maxPlayers: 42 });
     const persisted = await manager.readHistory(server.id);
     expect(persisted.some((entry) => entry.message.includes('Done (1.00s)') && entry.stream === 'stdout')).toBe(true);
     expect(persisted.some((entry) => entry.message.includes('stderr diagnostic') && entry.stream === 'stderr')).toBe(true);

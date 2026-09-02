@@ -83,19 +83,20 @@ export default function ServerOverviewTab() {
             <StatTile
               label="TPS"
               value={stats.tps === null ? 'N/A' : stats.tps.toFixed(1)}
-              sub={stats.tps === null ? 'Unavailable' : 'target: 20'}
+              sub={stats.tps === null ? 'Unavailable' : stats.tpsSource === 'spark-5s' ? 'Spark · last 5s' : 'target: 20'}
               icon={<Zap className="w-4 h-4" />}
               color={stats.tps !== null && stats.tps < 15 ? 'text-red-400' : stats.tps !== null && stats.tps < 18 ? 'text-yellow-400' : stats.tps !== null ? 'text-primary' : undefined}
             />
             <StatTile
               label="MSPT"
               value={stats.mspt === null ? 'N/A' : `${stats.mspt.toFixed(1)}ms`}
-              sub={stats.mspt === null ? 'Unavailable' : 'target: <50ms'}
+              sub={stats.mspt === null ? 'Unavailable' : stats.msptSource === 'spark-median-10s' ? 'Spark · median, last 10s' : 'target: <50ms'}
               icon={<Activity className="w-4 h-4" />}
             />
             <StatTile
               label="Net In"
               value={stats.networkIn === null ? 'N/A' : `${formatBytes(stats.networkIn * 1024)}/s`}
+              sub={stats.networkSource === 'linux-tcp-sockets' ? 'Java TCP · sampled sockets' : 'Unavailable'}
               icon={<Network className="w-4 h-4" />}
             />
             <StatTile

@@ -116,10 +116,10 @@ export class MetricHistorySampler {
       ramMax: stats.ramMax,
       players: stats.players,
       maxPlayers: stats.maxPlayers,
-      tps: null,
-      mspt: null,
-      networkIn: null,
-      networkOut: null,
+      tps: stats.tps,
+      mspt: stats.mspt,
+      networkIn: stats.networkIn,
+      networkOut: stats.networkOut,
     })] : []));
   }
 

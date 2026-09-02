@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
+import { RuntimeMetrics, type RuntimeMetricsOptions } from './runtimeMetrics.js';
 import { appendActivity, playerPresence, setServerStatus } from './activity.js';
 import { readFile, readdir, stat, statfs } from 'node:fs/promises';
 import path from 'node:path';
@@ -39,6 +40,7 @@ function severityFor(line: string): ConsoleSeverity {
 }
 
 export class ProcessManager {
+  private readonly runtimeMetrics: RuntimeMetrics;
   private readonly runtimes = new Map<string, Runtime>();
   private readonly history = new Map<string, ConsoleEntry[]>();
   private readonly metadataConfidence = new Map<string, number>();
@@ -61,7 +63,8 @@ export class ProcessManager {
     private readonly readExecutableJavaVersion: JavaVersionReader = readJavaVersion,
     private readonly consoleLogs: ConsoleLogStore = new ConsoleLogStore(),
     private readonly modIssues: ModIssueStore = new ModIssueStore(),
-  ) {}
+    metricsOptions: RuntimeMetricsOptions = {},
+  ) { this.runtimeMetrics = new RuntimeMetrics(metricsOptions); }
 
   private record(
     serverId: string,
@@ -86,6 +89,7 @@ export class ProcessManager {
     if (directory && detectedIssue) {
       void this.modIssues.record(directory, detectedIssue, this.diagnosticRunIds.get(serverId)).catch(() => undefined);
     }
+    if (stream === 'stdout') this.runtimeMetrics.consume(serverId, message);
     this.events.emitConsole(serverId, entry);
     void this.updatePlayerPresence(serverId, message);
     void this.updateListedPlayers(serverId, message);
@@ -111,6 +115,10 @@ export class ProcessManager {
       }
     });
     if (detected.ready) {
+      const runtime = this.runtimes.get(serverId);
+      if (runtime?.process.pid) this.runtimeMetrics.start(serverId, runtime.process.pid, () => {
+        if (this.runtimes.get(serverId) === runtime && runtime.process.stdin.writable) runtime.process.stdin.write('spark tps\n');
+      });
       this.fabricModCaptures.delete(serverId);
       const directory = this.store.get().servers.find((server) => server.id === serverId)?.directory;
       const runId = this.diagnosticRunIds.get(serverId);
@@ -195,6 +203,7 @@ export class ProcessManager {
   async start(serverId: string): Promise<void> {
     if (this.runtimes.has(serverId)) return;
     const server = this.server(serverId);
+    this.runtimeMetrics.stop(serverId);
     this.playerTransitions.delete(serverId);
     const diagnosticRunId = randomUUID();
     this.diagnosticRunIds.set(serverId, diagnosticRunId);
@@ -230,6 +239,7 @@ export class ProcessManager {
     });
     child.once('error', async (error) => {
       this.record(serverId, `Failed to start server: ${error.message}`);
+      this.runtimeMetrics.stop(serverId);
       this.runtimes.delete(serverId);
       this.metadataConfidence.delete(serverId);
       this.usageCache.delete(serverId);
@@ -241,6 +251,7 @@ export class ProcessManager {
     });
     child.once('exit', async (code, signal) => {
       this.record(serverId, `Server process exited (code=${code ?? 'none'}, signal=${signal ?? 'none'})`);
+      this.runtimeMetrics.stop(serverId);
       this.runtimes.delete(serverId);
       this.loadedMods.delete(serverId);
       this.fabricModCaptures.delete(serverId);
@@ -261,6 +272,7 @@ export class ProcessManager {
   }
 
   async stop(serverId: string): Promise<void> {
+    this.runtimeMetrics.stop(serverId);
     const runtime = this.runtimes.get(serverId);
     if (!runtime) {
       await this.store.update((state) => {
@@ -421,13 +433,10 @@ export class ProcessManager {
       ramMax: server.ramMax,
       disk: disk === null ? null : disk / 1048576,
       diskMax: diskMax === null ? null : diskMax / 1048576,
-      networkIn: null,
-      networkOut: null,
+      ...this.runtimeMetrics.values(serverId),
       players: this.onlinePlayers(serverId).length,
       maxPlayers: fileConfiguration.maxPlayers,
       uptime,
-      tps: null,
-      mspt: null,
       timestamp: Date.now(),
     };
   }

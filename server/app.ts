@@ -515,7 +515,7 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
     retentionFiles: config.consoleLogRetentionFiles,
   });
   const modIssues = new ModIssueStore();
-  const processes = new ProcessManager(store, events, undefined, undefined, consoleLogs, modIssues);
+  const processes = new ProcessManager(store, events, undefined, undefined, consoleLogs, modIssues, { tickQueriesEnabled: !config.readOnly });
   const metricHistory = new MetricHistoryStore();
   const metricSampler = new MetricHistorySampler(metricHistory, async () => Promise.all(store.get().servers.map(async (server) => ({ directory: server.directory, stats: await processes.stats(server.id) }))), options.metricIntervalMs);
   const hostMetrics = new HostMetricsSampler();

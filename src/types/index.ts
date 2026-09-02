@@ -98,6 +98,9 @@ export interface ServerStats {
   uptime: number;
   tps: number | null;
   mspt: number | null;
+  tpsSource?: 'spark-5s';
+  msptSource?: 'spark-median-10s';
+  networkSource?: 'linux-tcp-sockets';
   timestamp: number;
 }
 
