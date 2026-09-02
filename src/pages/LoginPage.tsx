@@ -47,7 +47,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="nethercraft-background min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-card border border-border rounded p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-9 h-9 bg-primary rounded flex items-center justify-center"><Sword className="w-5 h-5 text-primary-foreground" /></div>

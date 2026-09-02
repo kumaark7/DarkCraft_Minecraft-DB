@@ -53,7 +53,7 @@ function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItem
     <nav className="flex flex-col h-full">
       {/* Logo */}
       <div className={cn('flex items-center gap-2 px-4 py-4 border-b border-border', collapsed && 'justify-center px-2')}>
-        <img src="/nethercraft-mark.svg" alt={collapsed ? 'NETHERCRAFT' : ''} width={28} height={28} className="w-7 h-7 rounded shrink-0" />
+        <img src="/nethercraft-icon.png" alt={collapsed ? 'NETHERCRAFT' : ''} width={28} height={28} className="w-7 h-7 rounded shrink-0 object-contain" />
         {!collapsed && (
           <div className="min-w-0">
             <span className="text-sm font-bold tracking-widest text-foreground">NETHERCRAFT</span>

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, Bell, Sword } from 'lucide-react';
+import { Menu, Bell } from 'lucide-react';
 import { useLayout } from './LayoutContext';
 import { useNotifications } from '@/hooks/useGlobal';
 import { cn } from '@/utils';
@@ -32,9 +32,7 @@ export function MobileHeader() {
         <Menu className="w-5 h-5" />
       </button>
       <div className="flex items-center gap-2 flex-1 min-w-0">
-        <div className="w-6 h-6 bg-primary rounded flex items-center justify-center shrink-0">
-          <Sword className="w-3.5 h-3.5 text-primary-foreground" />
-        </div>
+        <img src="/nethercraft-icon.png" alt="" width={24} height={24} className="w-6 h-6 rounded shrink-0 object-contain" />
         <span className="font-semibold text-sm truncate">{title}</span>
       </div>
       <Link

@@ -100,6 +100,34 @@
   }
 }
 
+/* Decorative artwork stays behind content; cards and controls remain opaque. */
+.nethercraft-background {
+  position: relative;
+  isolation: isolate;
+}
+
+.nethercraft-background::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url('/nethercraft-background.png') center / cover no-repeat;
+  opacity: 0.16;
+}
+
+@media (max-width: 767px) {
+  .nethercraft-background::before {
+    opacity: 0.10;
+  }
+}
+
+@media print {
+  .nethercraft-background::before {
+    display: none;
+  }
+}
+
 /* Console monospace font */
 .console-output {
   font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;

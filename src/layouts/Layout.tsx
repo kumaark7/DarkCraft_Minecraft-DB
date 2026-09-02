@@ -5,7 +5,7 @@ import { LayoutProvider } from './LayoutContext';
 
 function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="nethercraft-background flex min-h-screen w-full bg-background">
       <Sidebar />
       <MobileSidebar />
       <div className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
