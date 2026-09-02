@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Layout } from '@/layouts/Layout';
 import { ServerStatusBadge } from '@/components/server/ServerStatusBadge';
+import { ServerIcon } from '@/components/server/ServerIcon';
 import { ExportServerDialog } from '@/components/server/ExportServerDialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useServer } from '@/hooks/useServers';
 import { serverService } from '@/services';
-import { serverIconFallback, cn } from '@/utils';
+import { cn } from '@/utils';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -106,9 +107,7 @@ export default function ServerManagementPage() {
           {/* Server info + actions */}
           <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-sm font-bold text-muted-foreground shrink-0">
-                {serverIconFallback(server.name)}
-              </div>
+              <ServerIcon serverId={server.id} name={server.name} className="text-sm" />
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="text-base font-bold text-foreground truncate">{server.name}</h1>
