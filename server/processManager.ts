@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
+import { appendActivity, playerPresence, setServerStatus } from './activity.js';
 import { readFile, readdir, stat, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import pidusage from 'pidusage';
@@ -17,6 +18,7 @@ import { detectModIssue, ModIssueStore } from './modIssues.js';
 interface Runtime {
   process: ChildProcessWithoutNullStreams;
   startedAt: number;
+  closed: Promise<void>;
 }
 
 interface ProcessUsage {
@@ -50,6 +52,7 @@ export class ProcessManager {
   private readonly loadedMods = new Map<string, Set<string>>();
   private readonly fabricModCaptures = new Map<string, { expected: number; captured: number }>();
   private readonly diagnosticRunIds = new Map<string, string>();
+  private readonly playerTransitions = new Map<string, Map<string, boolean>>();
 
   constructor(
     private readonly store: JsonStore,
@@ -95,7 +98,7 @@ export class ProcessManager {
     await this.store.update((state) => {
       const server = state.servers.find((item) => item.id === serverId);
       if (!server) return;
-      if (detected.ready && server.status === 'STARTING') server.status = 'ONLINE';
+      if (detected.ready && server.status === 'STARTING') setServerStatus(state, serverId, 'ONLINE');
       if (detected.javaVersion) {
         server.javaVersion = detected.javaVersion;
         this.runtimeJavaVersions.set(serverId, detected.javaVersion);
@@ -158,18 +161,28 @@ export class ProcessManager {
   }
 
   private async updatePlayerPresence(serverId: string, message: string): Promise<void> {
-    const joined = message.match(/:\s*([A-Za-z0-9_]{1,16}) joined the game/i);
-    const left = message.match(/:\s*([A-Za-z0-9_]{1,16}) left the game/i);
-    const username = joined?.[1] ?? left?.[1];
-    if (!username) return;
+    const presence = playerPresence(message);
+    if (!presence) return;
+    const { username, online } = presence;
+    const key = username.toLowerCase();
+    const transitions = this.playerTransitions.get(serverId) ?? new Map<string, boolean>();
+    const changed = transitions.get(key) !== online;
+    transitions.set(key, online);
+    this.playerTransitions.set(serverId, transitions);
     await this.store.update((state) => {
-      const players = state.players[serverId] ?? [];
-      const existing = players.find((player) => player.username === username);
-      if (existing) existing.online = Boolean(joined);
-      else players.push({ username, uuid: `observed-${username}`, online: Boolean(joined), isOp: false, isWhitelisted: false, isBanned: false });
-      state.players[serverId] = players;
       const server = state.servers.find((item) => item.id === serverId);
-      if (server) server.playerCount = players.filter((player) => player.online).length;
+      if (!server) return;
+      const players = state.players[serverId] ?? [];
+      const existing = players.find((player) => player.username.toLowerCase() === key);
+      if (existing) existing.online = online;
+      else players.push({ username, uuid: `observed-${username}`, online, isOp: false, isWhitelisted: false, isBanned: false });
+      state.players[serverId] = players;
+      server.playerCount = players.filter((player) => player.online).length;
+      if (changed) appendActivity(state, {
+        serverId, serverName: server.name, actor: username,
+        category: online ? 'player-join' : 'player-leave',
+        event: `${username} ${online ? 'joined' : 'left'} the game`,
+      });
     });
   }
 
@@ -182,24 +195,25 @@ export class ProcessManager {
   async start(serverId: string): Promise<void> {
     if (this.runtimes.has(serverId)) return;
     const server = this.server(serverId);
+    this.playerTransitions.delete(serverId);
     const diagnosticRunId = randomUUID();
     this.diagnosticRunIds.set(serverId, diagnosticRunId);
     await this.modIssues.beginRun(server.directory, diagnosticRunId);
     this.loadedMods.delete(serverId);
     this.fabricModCaptures.delete(serverId);
     this.lastListRefreshAt.delete(serverId);
+    await this.store.update((state) => {
+      setServerStatus(state, serverId, 'STARTING');
+      state.players[serverId] = (state.players[serverId] ?? []).map((player) => ({ ...player, online: false }));
+    });
     const child = spawn(server.startupExecutable, server.startupArgs, {
       cwd: server.directory,
       shell: false,
       windowsHide: true,
       stdio: 'pipe',
     });
-    this.runtimes.set(serverId, { process: child, startedAt: Date.now() });
-    await this.store.update((state) => {
-      const target = state.servers.find((item) => item.id === serverId);
-      if (target) target.status = 'STARTING';
-      state.players[serverId] = (state.players[serverId] ?? []).map((player) => ({ ...player, online: false }));
-    });
+    const closed = new Promise<void>(resolve => child.once('close', () => resolve()));
+    this.runtimes.set(serverId, { process: child, startedAt: Date.now(), closed });
 
     const attach = (input: NodeJS.ReadableStream, stream: 'stdout' | 'stderr') => {
       const lines = createInterface({ input });
@@ -222,8 +236,7 @@ export class ProcessManager {
       this.loadedMods.delete(serverId);
       this.fabricModCaptures.delete(serverId);
       await this.store.update((state) => {
-        const target = state.servers.find((item) => item.id === serverId);
-        if (target) target.status = 'CRASHED';
+        setServerStatus(state, serverId, 'CRASHED', `Server failed to start: ${error.message}`);
       });
     });
     child.once('exit', async (code, signal) => {
@@ -235,7 +248,9 @@ export class ProcessManager {
       await this.store.update((state) => {
         const target = state.servers.find((item) => item.id === serverId);
         if (target) {
-          target.status = code === 0 ? 'OFFLINE' : 'CRASHED';
+          const stopped = code === 0 || (target.status === 'STOPPING' && signal === 'SIGTERM');
+          setServerStatus(state, serverId, stopped ? 'OFFLINE' : 'CRASHED',
+            stopped ? undefined : `Server crashed (code=${code ?? 'none'}, signal=${signal ?? 'none'})`);
           target.pid = undefined;
           target.playerCount = 0;
           target.uptime = 0;
@@ -249,14 +264,12 @@ export class ProcessManager {
     const runtime = this.runtimes.get(serverId);
     if (!runtime) {
       await this.store.update((state) => {
-        const target = state.servers.find((item) => item.id === serverId);
-        if (target) target.status = 'OFFLINE';
+        setServerStatus(state, serverId, 'OFFLINE', 'Server is offline — no managed process');
       });
       return;
     }
     await this.store.update((state) => {
-      const target = state.servers.find((item) => item.id === serverId);
-      if (target) target.status = 'STOPPING';
+      setServerStatus(state, serverId, 'STOPPING');
     });
     runtime.process.stdin.write('stop\n');
     const timer = setTimeout(() => runtime.process.kill('SIGTERM'), 20_000);
@@ -456,7 +469,11 @@ export class ProcessManager {
   }
 
   async shutdown(): Promise<void> {
+    const running = [...this.runtimes.values()];
     await Promise.all([...this.runtimes.keys()].map((id) => this.stop(id)));
+    // Let exit handlers persist the final stop event and drain stdout/stderr before shutdown.
+    await Promise.all(running.map(runtime => runtime.closed));
     await this.consoleLogs.flush();
+    await this.store.save();
   }
 }

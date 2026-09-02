@@ -122,7 +122,7 @@ function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItem
       {/* Version footer */}
       {!collapsed && (
         <div className="px-4 py-3 border-t border-border">
-          <p className="text-[10px] text-muted-foreground">v1.0.0 — Demo Mode</p>
+          <p className="text-[10px] text-muted-foreground">v1.7 Live</p>
         </div>
       )}
     </nav>

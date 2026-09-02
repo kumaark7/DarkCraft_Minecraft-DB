@@ -88,6 +88,7 @@ setInterval(() => {
 // Server Service
 // ============================================================
 export const serverService: IServerService = {
+  async getServerIcon(id) { return _servers.find(server => server.id === id)?.iconUrl ?? null; },
   async getServers() { await delay(300); return [..._servers]; },
   async getServer(id) { await delay(200); return _servers.find(s => s.id === id) ?? null; },
   async getServerStats(id) { await delay(100); return _stats[id] ?? null; },

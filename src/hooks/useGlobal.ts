@@ -50,7 +50,23 @@ export function useActivity() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    globalService.getActivity().then(data => { setActivity(data); setLoading(false); });
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = async () => {
+      try {
+        const data = await globalService.getActivity();
+        if (!cancelled) setActivity(data);
+      } catch {
+        // Keep the last successful feed during a transient outage; API 401 handling remains shared.
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          timer = setTimeout(() => void load(), 5000);
+        }
+      }
+    };
+    void load();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   return { activity, loading };

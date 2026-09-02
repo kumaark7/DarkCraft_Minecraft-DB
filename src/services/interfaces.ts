@@ -36,6 +36,7 @@ import type {
 // Server service
 export interface IServerService {
   getServers(): Promise<Server[]>;
+  getServerIcon(id: string): Promise<string | null>;
   getServer(id: string): Promise<Server | null>;
   getServerStats(id: string): Promise<ServerStats | null>;
   getServerMetricHistory(id: string, range: MetricHistoryRange): Promise<ServerMetricSample[]>;

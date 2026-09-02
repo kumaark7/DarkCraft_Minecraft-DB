@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { recordActivity } from './activity.js';
+import { readServerIcon } from './serverIcon.js';
 import { registerModrinthRoutes } from './modrinth.js';
 import { registerModrinthInstallRoute } from './modrinthInstaller.js';
 import { createReadStream, existsSync, readdirSync } from 'node:fs';
@@ -23,7 +25,6 @@ import websocket from '@fastify/websocket';
 import AdmZip from 'adm-zip';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import type {
-  ActivityEvent,
   Backup,
   Bot,
   ImportInspection,
@@ -142,13 +143,6 @@ async function withAvailableBuild(context: AppContext, server: ManagedServer): P
   } catch { return server; }
 }
 
-async function recordActivity(store: JsonStore, event: Omit<ActivityEvent, 'id' | 'timestamp'>): Promise<void> {
-  await store.update((state) => {
-    state.activity.unshift({ ...event, id: randomUUID(), timestamp: new Date().toISOString() });
-    state.activity = state.activity.slice(0, 1000);
-  });
-}
-
 async function listFiles(directory: string, serverRoot: string): Promise<ServerFile[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   return Promise.all(entries.filter((entry) => !entry.isSymbolicLink()).map(async (entry) => {
@@ -229,6 +223,10 @@ function registerReadRoutes(context: AppContext): void {
     const server = await processes.serverSnapshot(id);
     if (!server) throw Object.assign(new Error('Server not found'), { statusCode: 404 });
     return ok(await withAvailableBuild(context, server));
+  });
+  app.get('/api/v1/servers/:id/icon', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    return ok(await readServerIcon(await serverPath(context, params(request).id ?? '', '/server-icon.png')));
   });
   app.get('/api/v1/servers/:id/stats', async (request) => ok(await processes.stats(params(request).id ?? '')));
   app.get('/api/v1/servers/:id/metrics', async (request) => {

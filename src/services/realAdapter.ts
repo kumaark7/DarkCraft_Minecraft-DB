@@ -13,6 +13,7 @@ import { assertServerId, normalizeServerPath, safeServerPath } from './security'
 export function createRealServices(client: ApiClient) {
   const serverService: IServerService = {
     getServers: () => client.get<Server[]>('/servers'),
+    getServerIcon: (id) => client.get<string | null>(safeServerPath(id, '/icon')),
     getServer: (id) => client.get<Server | null>(safeServerPath(id)),
     getServerStats: (id) => client.get<ServerStats | null>(safeServerPath(id, '/stats')),
     getServerMetricHistory: (id, range: MetricHistoryRange) => client.get<ServerMetricSample[]>(safeServerPath(id, '/metrics'), { range }),

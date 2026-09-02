@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Square, RotateCcw, Skull, Terminal, Settings, Download, MoreHorizontal, Trash2 } from 'lucide-react';
-import { cn, formatUptime, formatBytes, serverIconFallback } from '@/utils';
+import { cn, formatUptime, formatBytes } from '@/utils';
+import { ServerIcon } from './ServerIcon';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -34,16 +35,15 @@ export function ServerCard({ server, onStart, onStop, onRestart, onKill, onDelet
       )}>
         {/* Header */}
         <div className="flex items-start gap-3 mb-3">
-          <div className={cn(
-            'flex items-center justify-center rounded bg-muted text-muted-foreground font-bold shrink-0 text-xs',
-            compact ? 'w-8 h-8' : 'w-10 h-10'
-          )}>
-            {serverIconFallback(server.name)}
-          </div>
+          <ServerIcon serverId={server.id} name={server.name} compact={compact} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={cn('font-semibold text-foreground truncate', compact ? 'text-sm' : 'text-sm')}>
-                {server.name}
+              <h3 className="font-semibold text-foreground truncate text-sm min-w-0">
+                <Link to={`/servers/${encodeURIComponent(server.id)}`}
+                  className="block truncate rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  title={server.name} aria-label={`Open ${server.name} overview`}>
+                  {server.name}
+                </Link>
               </h3>
               <ServerStatusBadge status={server.status} size="sm" />
             </div>
