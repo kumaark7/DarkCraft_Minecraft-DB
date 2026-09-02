@@ -365,6 +365,7 @@ export const fileService: IFileService = {
 // Plugin Service
 // ============================================================
 export const pluginService: IPluginService = {
+  async installModrinth() { throw new Error('Installing Modrinth mods requires the real backend.'); },
   async searchModrinth() { throw new Error('Modrinth browsing requires the real backend. Mock mode does not suggest real downloads.'); },
   async getPlugins(id) { await delay(300); return _plugins[id] ?? []; },
   async getMods(id) { await delay(300); return _mods[id] ?? []; },

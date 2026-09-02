@@ -38,10 +38,26 @@ async function fixture() {
   const grant = await context.auth.service.completeSetup({
     setupToken: setup.setupToken, password: 'Testing-password-7', totpCode: totpAt(setup.manualKey, Date.now()).code,
   });
-  return { context, fetcher, cookie: 'darkcraft_session=' + grant.sessionToken };
+  return { context, fetcher, cookie: 'darkcraft_session=' + grant.sessionToken, csrf: grant.csrfToken };
 }
 
 describe('Modrinth API boundary', () => {
+  it('protects installation with authentication, CSRF, origin and read-only enforcement', async () => {
+    const { context, fetcher, cookie, csrf } = await fixture();
+    const url = '/api/v1/servers/server-1/modrinth/install';
+    const origin = 'https://darkcraft.projectdarkhope.xyz';
+    const payload = { versionId: 'Version1' };
+    expect((await context.app.inject({ method: 'POST', url, payload, headers: { origin } })).statusCode).toBe(401);
+    expect((await context.app.inject({ method: 'POST', url, payload, headers: { cookie, origin } })).statusCode).toBe(403);
+    expect((await context.app.inject({ method: 'POST', url, payload, headers: { cookie, origin: 'https://evil.example', 'x-csrf-token': csrf } })).statusCode).toBe(403);
+    context.config.readOnly = true;
+    expect((await context.app.inject({ method: 'POST', url, payload, headers: { cookie, origin, 'x-csrf-token': csrf } })).statusCode).toBe(403);
+    context.config.readOnly = false;
+    expect((await context.app.inject({ method: 'POST', url, payload: { versionId: '../escape' }, headers: { cookie, origin, 'x-csrf-token': csrf } })).statusCode).toBe(400);
+    expect(fetcher).not.toHaveBeenCalled();
+    await context.app.close();
+  });
+
   it('requires authentication and derives exact compatibility from the managed server', async () => {
     const { context, fetcher, cookie } = await fixture();
     const unauthenticated = await context.app.inject({ method: 'GET', url: '/api/v1/servers/server-1/modrinth' });

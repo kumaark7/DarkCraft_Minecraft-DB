@@ -107,6 +107,34 @@ export class ModrinthCatalog {
     try { return await job; } finally { this.pending.delete(route); }
   }
 
+  async installVersion(versionId: string): Promise<RecordValue> {
+    if (!id(versionId)) throw problem('Invalid Modrinth release ID.', 400);
+    const route = '/version/' + versionId;
+    this.cache.delete(route);
+    const version = object(await this.json(route));
+    if (version.id !== versionId || !id(version.project_id)) throw problem('Invalid Modrinth release metadata.');
+    return version;
+  }
+
+  async installProject(projectId: string): Promise<RecordValue> {
+    if (!id(projectId)) throw problem('Invalid Modrinth project ID.', 400);
+    const route = '/project/' + projectId;
+    this.cache.delete(route);
+    const project = object(await this.json(route));
+    if (project.id !== projectId || project.project_type !== 'mod') throw problem('This Modrinth project is not a mod.', 400);
+    return { ...project, project_id: projectId };
+  }
+
+  async installVersions(projectId: string, target: ReturnType<typeof modrinthTarget>): Promise<unknown[]> {
+    if (!id(projectId) || !target.loader || !target.minecraftVersion) throw problem('Invalid dependency target.', 400);
+    const filters = new URLSearchParams({ loaders: JSON.stringify([target.loader]), game_versions: JSON.stringify([target.minecraftVersion]), include_changelog: 'false' });
+    const route = '/project/' + projectId + '/version?' + filters;
+    this.cache.delete(route);
+    const versions = await this.json(route);
+    if (!Array.isArray(versions)) throw problem('Invalid Modrinth dependency metadata.');
+    return versions;
+  }
+
   async search(server: Target, search = '', offset = 0): Promise<ModrinthSearch> {
     if (typeof search !== 'string' || search.length > 100 || !Number.isInteger(offset) || offset < 0 || offset > 10_000) {
       throw problem('Invalid Modrinth search or page.', 400);

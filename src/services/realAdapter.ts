@@ -62,6 +62,7 @@ export function createRealServices(client: ApiClient) {
     extractZip: (id, path) => client.post(safeServerPath(id, '/files/extract'), { path: normalizeServerPath(path) }),
   };
   const pluginService: IPluginService = {
+    installModrinth: (id, versionId) => client.post<import('../types/modrinth').ModrinthInstallResult>(safeServerPath(id, '/modrinth/install'), { versionId }),
     searchModrinth: (id, q = '', offset = 0) => client.get<import('../types/modrinth').ModrinthSearch>(safeServerPath(id, '/modrinth'), { q, offset: String(offset) }),
     getPlugins: (id) => client.get<Plugin[]>(safeServerPath(id, '/plugins')), getMods: (id) => client.get<Mod[]>(safeServerPath(id, '/mods')),
     getModIssues: (id) => client.get<ModIssue[]>(safeServerPath(id, '/mod-issues')),

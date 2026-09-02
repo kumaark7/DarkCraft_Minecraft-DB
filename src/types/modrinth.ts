@@ -1,3 +1,9 @@
+export interface ModrinthInstallResult {
+  installed: string[];
+  alreadyPresent: string[];
+  restartRequired: boolean;
+}
+
 export interface ModrinthMatch {
   projectId: string;
   title: string;

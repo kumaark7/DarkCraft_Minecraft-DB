@@ -11,6 +11,12 @@ function clientStub(): ApiClient {
 }
 
 describe('real adapter', () => {
+  it('installs a release through the server-scoped backend, not an external URL', async () => {
+    const client = clientStub();
+    await createRealServices(client).pluginService.installModrinth('server-1', 'Release1');
+    expect(client.post).toHaveBeenCalledWith('/servers/server-1/modrinth/install', { versionId: 'Release1' });
+  });
+
   it('maps server reads to the versioned REST contract', async () => {
     const client = clientStub();
     await createRealServices(client).serverService.getServers();

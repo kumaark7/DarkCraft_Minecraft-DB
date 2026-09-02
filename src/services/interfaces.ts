@@ -102,6 +102,7 @@ export interface IFileService {
 
 // Plugin/Mod service
 export interface IPluginService {
+  installModrinth(id: string, versionId: string): Promise<import('../types/modrinth').ModrinthInstallResult>;
   searchModrinth(id: string, query?: string, offset?: number): Promise<import('../types/modrinth').ModrinthSearch>;
   getPlugins(id: string): Promise<Plugin[]>;
   getMods(id: string): Promise<Mod[]>;

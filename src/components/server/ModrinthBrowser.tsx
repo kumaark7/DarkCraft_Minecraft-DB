@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { ExternalLink, Package, Search } from 'lucide-react';
+import { Download, Package, Search } from 'lucide-react';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { pluginService } from '@/services';
-import type { ModrinthSearch } from '@/types/modrinth';
+import type { ModrinthMatch, ModrinthSearch } from '@/types/modrinth';
 
-export function ModrinthBrowser({ serverId, software, minecraftVersion }: {
-  serverId: string; software: string; minecraftVersion: string;
+export function ModrinthBrowser({ serverId, software, minecraftVersion, onInstalled }: {
+  serverId: string; software: string; minecraftVersion: string; onInstalled: () => Promise<void>;
 }) {
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<ModrinthSearch | null>(null);
@@ -14,6 +16,26 @@ export function ModrinthBrowser({ serverId, software, minecraftVersion }: {
   const [error, setError] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const sequence = useRef(0);
+  const [installTarget, setInstallTarget] = useState<ModrinthMatch | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState('');
+  const [installedVersions, setInstalledVersions] = useState<string[]>([]);
+
+  async function install() {
+    if (!installTarget || installing) return;
+    setInstalling(true); setInstallError('');
+    try {
+      const installed = await pluginService.installModrinth(serverId, installTarget.versionId);
+      setInstalledVersions(previous => [...previous, installTarget.versionId]);
+      setInstallTarget(null);
+      toast.success(installed.restartRequired
+        ? installed.installed.length + ' mod file(s) installed. Restart Minecraft to load them.'
+        : 'This release is already installed.');
+      try { await onInstalled(); } catch { toast.warning('Installed successfully. Refresh the installed mods list.'); }
+    } catch (reason) {
+      setInstallError(reason instanceof Error ? reason.message : 'Mod installation failed. Please retry.');
+    } finally { setInstalling(false); }
+  }
   const supported = ['Fabric', 'Forge', 'NeoForge'].includes(software);
   useEffect(() => {
     sequence.current += 1;
@@ -60,14 +82,14 @@ export function ModrinthBrowser({ serverId, software, minecraftVersion }: {
               <Input id="modrinth-query" type="search" maxLength={100} value={query} onChange={event => setQuery(event.target.value)}
                 placeholder="Search mods, or browse popular releases" className="h-10 text-xs" />
             </div>
-            <Button type="submit" variant="secondary" disabled={loading} className="h-10 text-xs gap-1.5">
+            <Button type="submit" variant="secondary" disabled={loading || installing} className="h-10 text-xs gap-1.5">
               <Search className="w-3.5 h-3.5" aria-hidden="true" />{loading ? 'Checking versions…' : 'Search Modrinth'}
             </Button>
           </form>
           <p className="text-[10px] text-muted-foreground">
             Stable releases only. The same release must list this exact Minecraft version, loader and server support.
-            Publisher compatibility is not a guarantee against conflicts; review dependencies before using the existing Upload Mod action.
-            Browsing does not install, activate or update mods.
+            Install downloads the selected release and compatible required dependencies directly to this server's mods folder.
+            Existing versions are never overwritten. Restart Minecraft afterward to load installed mods.
           </p>
           <div role="status" aria-live="polite" className="text-xs text-muted-foreground">
             {loading ? 'Checking release metadata on Modrinth…' : result ? (result.supported
@@ -87,19 +109,29 @@ export function ModrinthBrowser({ serverId, software, minecraftVersion }: {
             <p className="text-[10px] text-muted-foreground break-words">
               {match.loader} · Minecraft {match.minecraftVersion} · Release {match.versionNumber}
               {match.clientRequired ? ' · Also required on clients' : ''}
-              {match.requiredDependencies > 0 ? ' · ' + match.requiredDependencies + ' required dependencies — review before upload' : ''}
+              {match.requiredDependencies > 0 ? ' · ' + match.requiredDependencies + ' required dependencies' : ''}
             </p>
           </div>
-          <Button variant="secondary" size="sm" className="h-10 md:h-8 text-xs gap-1.5 shrink-0" asChild>
-            <a href={match.versionUrl} target="_blank" rel="noopener noreferrer" aria-label={'View ' + match.title + ' release ' + match.versionNumber + ' on Modrinth'}>
-              View matching release <ExternalLink className="w-3 h-3" aria-hidden="true" />
-            </a>
+          <Button variant="secondary" size="sm" className="h-10 md:h-8 text-xs gap-1.5 shrink-0"
+            disabled={installing || installedVersions.includes(match.versionId)}
+            onClick={() => { setInstallError(''); setInstallTarget(match); }}
+            aria-label={'Install ' + match.title + ' release ' + match.versionNumber}>
+            <Download className="w-3 h-3" aria-hidden="true" />
+            {installedVersions.includes(match.versionId) ? 'Installed' : 'Install'}
           </Button>
         </li>)}
       </ul>}
       {result?.nextOffset != null && <div className="p-3 border-t border-border">
         <Button type="button" variant="ghost" className="h-10 text-xs" disabled={loading} onClick={() => void search(result.nextOffset!)}>Check more results</Button>
       </div>}
+      <ConfirmDialog open={!!installTarget} onOpenChange={open => { if (!open && !installing) setInstallTarget(null); }}
+        title={'Install ' + (installTarget?.title ?? 'mod') + '?'}
+        description={'Downloads this exact release and compatible required dependencies into this server’s mods folder. Existing or disabled versions are not replaced or enabled. Restart Minecraft to load new files.'}
+        confirmLabel={installing ? 'Installing…' : 'Install'} confirmDisabled={installing} onConfirm={() => void install()}>
+        <p className="text-xs text-muted-foreground break-words">{software} · Minecraft {minecraftVersion} · {installTarget?.versionNumber}</p>
+        {installTarget?.clientRequired && <p className="text-xs text-muted-foreground">Players also need this mod on their clients.</p>}
+        {installError && <p role="alert" className="text-xs text-destructive">{installError}</p>}
+      </ConfirmDialog>
     </section>
   );
 }

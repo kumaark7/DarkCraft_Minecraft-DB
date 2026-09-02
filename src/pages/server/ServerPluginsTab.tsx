@@ -223,7 +223,7 @@ export default function ServerPluginsTab() {
         </section>
       )}
 
-      {server && <ModrinthBrowser key={server.id + ':' + server.software + ':' + server.minecraftVersion} serverId={id!} software={server.software} minecraftVersion={server.minecraftVersion} />}
+      {server && <ModrinthBrowser key={server.id + ':' + server.software + ':' + server.minecraftVersion} serverId={id!} software={server.software} minecraftVersion={server.minecraftVersion} onInstalled={load} />}
 
       <ConfirmDialog
         open={!!deleteTarget}

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { registerModrinthRoutes } from './modrinth.js';
+import { registerModrinthInstallRoute } from './modrinthInstaller.js';
 import { createReadStream, existsSync, readdirSync } from 'node:fs';
 import {
   copyFile,
@@ -528,6 +529,12 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
   registerModrinthRoutes(app, (id) => ({ ...serverById(store.get(), id) }), options.modrinthFetcher, options.now);
+  registerModrinthInstallRoute(app, {
+    getServer: (id) => ({ ...serverById(store.get(), id) }),
+    getModsRoot: (id) => serverPath(context, id, '/mods'),
+    readOnly: () => config.readOnly,
+    fetcher: options.modrinthFetcher,
+  });
   const scheduleRunner = new ScheduleRunner(store, (schedule) => runSchedule(context, schedule)); scheduleRunner.start();
   metricSampler.start();
   app.get('/api/v1/servers/:id/console/stream', { websocket: true }, (socket, request) => {
