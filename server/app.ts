@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { registerModrinthRoutes } from './modrinth.js';
 import { createReadStream, existsSync, readdirSync } from 'node:fs';
 import {
   copyFile,
@@ -496,6 +497,7 @@ function registerPluginWrites(context: AppContext): void {
 }
 
 interface BuildAppOptions {
+  modrinthFetcher?: typeof fetch;
   now?: () => number;
   sessionTtlMs?: number;
   lockoutThreshold?: number;
@@ -525,6 +527,7 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
   const context = { app, store, processes, hostMetrics, auth, config, catalog, metricHistory, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner };
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
+  registerModrinthRoutes(app, (id) => ({ ...serverById(store.get(), id) }), options.modrinthFetcher, options.now);
   const scheduleRunner = new ScheduleRunner(store, (schedule) => runSchedule(context, schedule)); scheduleRunner.start();
   metricSampler.start();
   app.get('/api/v1/servers/:id/console/stream', { websocket: true }, (socket, request) => {

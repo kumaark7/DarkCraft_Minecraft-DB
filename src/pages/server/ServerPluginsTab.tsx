@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EmptyState, LoadingState } from '@/components/shared/States';
 import { pluginService } from '@/services';
+import { ModrinthBrowser } from '@/components/server/ModrinthBrowser';
 import { cn, formatBytes } from '@/utils';
 import { useServer } from '@/hooks/useServers';
 import { toast } from 'sonner';
@@ -222,11 +223,7 @@ export default function ServerPluginsTab() {
         </section>
       )}
 
-      {/* Marketplace notice */}
-      <div className="bg-muted/30 border border-border rounded p-3 text-xs text-muted-foreground">
-        <Package className="w-3.5 h-3.5 inline mr-1.5" />
-        Plugin/mod marketplace integration can be connected by replacing the plugin service adapter.
-      </div>
+      {server && <ModrinthBrowser key={server.id + ':' + server.software + ':' + server.minecraftVersion} serverId={id!} software={server.software} minecraftVersion={server.minecraftVersion} />}
 
       <ConfirmDialog
         open={!!deleteTarget}
