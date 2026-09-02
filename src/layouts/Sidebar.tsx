@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Bot, Activity, ScrollText,
-  Bell, Settings, ChevronLeft, ChevronRight, Sword, X, LogOut
+  Bell, Settings, ChevronLeft, ChevronRight, X, LogOut
 } from 'lucide-react';
 import { cn } from '@/utils';
 import { useLayout } from './LayoutContext';
@@ -53,9 +53,7 @@ function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItem
     <nav className="flex flex-col h-full">
       {/* Logo */}
       <div className={cn('flex items-center gap-2 px-4 py-4 border-b border-border', collapsed && 'justify-center px-2')}>
-        <div className="flex items-center justify-center w-7 h-7 bg-primary rounded shrink-0">
-          <Sword className="w-4 h-4 text-primary-foreground" />
-        </div>
+        <img src="/nethercraft-mark.svg" alt={collapsed ? 'NETHERCRAFT' : ''} width={28} height={28} className="w-7 h-7 rounded shrink-0" />
         {!collapsed && (
           <div className="min-w-0">
             <span className="text-sm font-bold tracking-widest text-foreground">NETHERCRAFT</span>
