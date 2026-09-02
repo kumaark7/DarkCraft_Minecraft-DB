@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus, LayoutGrid, List, Search, ChevronDown,
   Play, Square, RotateCcw, Skull, Terminal, Settings2,
   Download, MoreHorizontal, Trash2, Server as ServerIcon
 } from 'lucide-react';
 import { Layout } from '@/layouts/Layout';
+import { ServerIcon as ManagedServerIcon } from '@/components/server/ServerIcon';
 import { ServerStatusBadge } from '@/components/server/ServerStatusBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ExportServerDialog } from '@/components/server/ExportServerDialog';
@@ -18,7 +19,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useServers } from '@/hooks/useServers';
-import { formatBytes, formatUptime, cn, serverIconFallback } from '@/utils';
+import { formatBytes, formatUptime, cn } from '@/utils';
 import type { Server, ServerStatus } from '@/types';
 
 type View = 'card' | 'list';
@@ -248,11 +249,13 @@ export default function ServersPage() {
                     <tr key={server.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
-                            {serverIconFallback(server.name)}
-                          </div>
+                          <ManagedServerIcon serverId={server.id} name={server.name} className="w-7 h-7 text-[10px]" />
                           <div>
-                            <p className="font-medium text-foreground">{server.name}</p>
+                            <p className="font-medium text-foreground">
+                              <Link to={`/servers/${encodeURIComponent(server.id)}`}
+                                className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                aria-label={`Open ${server.name} overview`}>{server.name}</Link>
+                            </p>
                             <p className="text-[10px] text-muted-foreground">{server.software}</p>
                           </div>
                         </div>
@@ -362,12 +365,14 @@ function ServerCardFull({ server, onStart, onStop, onRestart, onKill, onExport, 
   return (
     <div className="bg-card border border-border rounded p-4 flex flex-col h-full">
       <div className="flex items-start gap-3 mb-3">
-        <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
-          {serverIconFallback(server.name)}
-        </div>
+        <ManagedServerIcon serverId={server.id} name={server.name} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-sm text-foreground truncate">{server.name}</h3>
+            <h3 className="font-semibold text-sm text-foreground truncate min-w-0">
+              <Link to={`/servers/${encodeURIComponent(server.id)}`}
+                className="block truncate rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                title={server.name} aria-label={`Open ${server.name} overview`}>{server.name}</Link>
+            </h3>
             <ServerStatusBadge status={server.status} size="sm" />
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{server.software} · {server.minecraftVersion}</p>
