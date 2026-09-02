@@ -62,13 +62,6 @@ function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItem
         )}
       </div>
 
-      <div className="px-2 pb-2">
-        <button type="button" onClick={() => { void logout(); onItemClick?.(); }} className={cn('w-full flex items-center gap-2.5 px-2 py-2 rounded text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground', collapsed && 'justify-center px-0')} aria-label="Log out">
-          <LogOut className="w-4 h-4 shrink-0" />
-          {!collapsed && <span>Log out</span>}
-        </button>
-      </div>
-
       {/* Nav items */}
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
         {NAV_SECTIONS.map((section, si) => (
@@ -117,6 +110,12 @@ function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItem
             </div>
           </div>
         ))}
+        <div className="border-t border-border pt-3">
+          <button type="button" onClick={() => { void logout(); onItemClick?.(); }} className={cn('w-full flex items-center gap-2.5 px-2 py-2 rounded text-sm text-destructive bg-destructive/10 hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-destructive transition-colors', collapsed && 'justify-center px-0')} aria-label="Log out" title={collapsed ? 'Log out' : undefined}>
+            <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
+            {!collapsed && <span>Log out</span>}
+          </button>
+        </div>
       </div>
 
       {/* Version footer */}
