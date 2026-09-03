@@ -5,13 +5,13 @@ interface Props {
   value: string | number;
   sub?: string;
   icon?: React.ReactNode;
-  highlight?: 'green' | 'yellow' | 'red' | 'blue';
+  highlight?: 'primary' | 'yellow' | 'red' | 'blue';
   className?: string;
 }
 
 export function StatCard({ label, value, sub, icon, highlight, className }: Props) {
   const colorMap: Record<string, string> = {
-    green: 'text-primary',
+    primary: 'text-primary',
     yellow: 'text-yellow-400',
     red: 'text-red-400',
     blue: 'text-accent',

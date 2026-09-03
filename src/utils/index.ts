@@ -65,7 +65,7 @@ export function formatTime(iso: string): string {
 }
 
 export const statusColors: Record<ServerStatus, string> = {
-  ONLINE: 'text-emerald-400',
+  ONLINE: 'text-primary',
   OFFLINE: 'text-muted-foreground',
   STARTING: 'text-yellow-400',
   STOPPING: 'text-orange-400',
@@ -73,7 +73,7 @@ export const statusColors: Record<ServerStatus, string> = {
 };
 
 export const statusBgColors: Record<ServerStatus, string> = {
-  ONLINE: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  ONLINE: 'bg-primary/10 text-primary border-primary/20',
   OFFLINE: 'bg-muted/50 text-muted-foreground border-border',
   STARTING: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
   STOPPING: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
@@ -81,7 +81,7 @@ export const statusBgColors: Record<ServerStatus, string> = {
 };
 
 export const statusDotColors: Record<ServerStatus, string> = {
-  ONLINE: 'bg-emerald-400',
+  ONLINE: 'bg-primary',
   OFFLINE: 'bg-muted-foreground',
   STARTING: 'bg-yellow-400',
   STOPPING: 'bg-orange-400',
@@ -93,7 +93,7 @@ export const severityColors: Record<ConsoleSeverity, string> = {
   WARN: 'text-yellow-400',
   ERROR: 'text-red-400',
   COMMAND: 'text-sky-400',
-  PLAYER: 'text-green-400',
+  PLAYER: 'text-primary',
 };
 
 export function getFileIcon(extension?: string): string {

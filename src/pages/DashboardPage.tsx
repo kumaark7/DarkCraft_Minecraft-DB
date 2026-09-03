@@ -53,7 +53,7 @@ export default function DashboardPage() {
         {/* Top stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Total Servers" value={servers.length} icon={<Server className="w-4 h-4" />} />
-          <StatCard label="Online" value={online} icon={<Server className="w-4 h-4" />} highlight="green" />
+          <StatCard label="Online" value={online} icon={<Server className="w-4 h-4" />} highlight="primary" />
           <StatCard label="Offline" value={offline} icon={<Server className="w-4 h-4" />} />
           <StatCard label="Players Online" value={totalPlayers} icon={<Users className="w-4 h-4" />} highlight="blue" />
         </div>

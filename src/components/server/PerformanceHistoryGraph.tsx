@@ -34,7 +34,7 @@ export function PerformanceHistoryGraph({ samples, range, onRangeChange, loading
   const series = [
     { label: 'CPU', color: '#ef4444', values: paths(samples, (sample) => sample.cpu) },
     { label: 'RAM', color: '#eab308', values: paths(samples, (sample) => percent(sample.ram, sample.ramMax)) },
-    { label: 'Players', color: '#22c55e', values: paths(samples, (sample) => percent(sample.players, sample.maxPlayers)) },
+    { label: 'Players', color: 'hsl(var(--chart-1))', values: paths(samples, (sample) => percent(sample.players, sample.maxPlayers)) },
   ];
 
   return (
