@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { globalService } from '@/services';
 import type { AppNotification, HostStats, ActivityEvent, LogEntry, Bot } from '@/types';
+import { appendHostSample, hostSample, pollHostStats, type HostSample } from '@/utils/hostHistory';
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -33,16 +34,23 @@ export function useNotifications() {
   };
 }
 
-export function useHostStats() {
+export function useHostMonitor() {
   const [stats, setStats] = useState<HostStats | null>(null);
+  const [history, setHistory] = useState<HostSample[]>([]);
 
   useEffect(() => {
-    globalService.getHostStats().then(setStats);
-    const tid = setInterval(() => globalService.getHostStats().then(setStats), 5000);
-    return () => clearInterval(tid);
+    return pollHostStats(() => globalService.getHostStats(), data => {
+      setStats(data);
+      const sample = hostSample(data, Date.now());
+      setHistory(previous => appendHostSample(previous, sample));
+    });
   }, []);
 
-  return stats;
+  return { stats, history };
+}
+
+export function useHostStats() {
+  return useHostMonitor().stats;
 }
 
 export function useActivity() {

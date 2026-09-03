@@ -1,11 +1,16 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DashboardEvents } from './events.js';
 import { ProcessManager } from './processManager.js';
 import { JsonStore } from './store.js';
 import type { ManagedServer } from './types.js';
+
+vi.mock('node:fs/promises', async original => {
+  const actual = await original<typeof import('node:fs/promises')>();
+  return { ...actual, stat: vi.fn(actual.stat) };
+});
 
 const temporary: string[] = [];
 afterEach(async () => Promise.all(temporary.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
@@ -63,6 +68,7 @@ describe('managed Minecraft runtime', () => {
     expect(snapshot).toMatchObject({ status: 'ONLINE', software: 'Paper', minecraftVersion: '26.2', javaVersion: 'Java 25', playerCount: 2, maxPlayers: 42, ip: '127.0.0.1', port: 25570, cpu: 12.5, ram: 256 });
     expect(snapshot?.pid).toBeTypeOf('number');
     expect(snapshot?.disk).toBeGreaterThan(0);
+    expect(snapshot?.disk).toBeTypeOf('number');
     expect(snapshot?.diskMax).toBeGreaterThan(0);
     const stats = await manager.stats(server.id);
     expect(stats).toMatchObject({ networkIn: null, networkOut: null, tps: 19.5, mspt: 4, tpsSource: 'spark-5s', msptSource: 'spark-median-10s', players: 2, maxPlayers: 42 });
@@ -72,5 +78,20 @@ describe('managed Minecraft runtime', () => {
 
     await manager.kill(server.id);
     await waitFor(() => store.get().servers[0]?.status === 'CRASHED');
+  });
+  it('keeps measuring when an atomic temporary file disappears during traversal', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'darkcraft-disk-'));
+    temporary.push(root);
+    await mkdir(path.join(root, 'nested'));
+    await writeFile(path.join(root, 'stable.bin'), Buffer.alloc(8));
+    await writeFile(path.join(root, 'nested', 'value.tmp'), Buffer.alloc(5));
+    const store = new JsonStore(path.join(root, 'dashboard.json')); await store.load();
+    const manager = new ProcessManager(store, new DashboardEvents());
+    const measure = () => (manager as unknown as { directorySize(directory: string): Promise<number> }).directorySize(root);
+    vi.mocked(stat).mockRejectedValueOnce(Object.assign(new Error('renamed during scan'), { code: 'ENOENT' }));
+    await expect(measure()).resolves.toBeGreaterThan(0);
+    vi.mocked(stat).mockRejectedValueOnce(Object.assign(new Error('permission denied'), { code: 'EACCES' }));
+    await expect(measure()).rejects.toMatchObject({ code: 'EACCES' });
+    await expect(measure()).resolves.toBeGreaterThan(8);
   });
 });

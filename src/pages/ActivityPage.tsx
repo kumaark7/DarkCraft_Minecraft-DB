@@ -5,6 +5,8 @@ import { formatDateTime } from '@/utils';
 import { Input } from '@/components/ui/input';
 import { Search, Activity as ActivityIcon, Server, Users, Archive, Settings, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { EmptyState } from '@/components/shared/States';
+import { PlayerAvatar } from '@/components/shared/PlayerAvatar';
+import { activityPlayerName } from '@/utils/playerAvatar';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'server-start': <CheckCircle2 className="w-3.5 h-3.5 text-primary" />,
@@ -65,7 +67,7 @@ export default function ActivityPage() {
             <div className="divide-y divide-border/50">
               {filtered.map(event => (
                 <div key={event.id} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/20 transition-colors">
-                  <span className="mt-0.5 shrink-0">{CATEGORY_ICONS[event.category] ?? <ActivityIcon className="w-3.5 h-3.5 text-muted-foreground" />}</span>
+                  <span className="mt-0.5 shrink-0">{activityPlayerName(event) ? <PlayerAvatar username={activityPlayerName(event)!} className="w-3.5 h-3.5 text-[8px]" /> : CATEGORY_ICONS[event.category] ?? <ActivityIcon className="w-3.5 h-3.5 text-muted-foreground" />}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground">{event.event}</p>
                     <div className="flex items-center gap-3 mt-0.5 text-[10px] text-muted-foreground flex-wrap">

@@ -372,7 +372,12 @@ export class ProcessManager {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (entry.isSymbolicLink()) continue;
       const current = path.join(directory, entry.name);
-      bytes += entry.isDirectory() ? await this.directorySize(current) : (await stat(current)).size;
+      try {
+        bytes += entry.isDirectory() ? await this.directorySize(current) : (await stat(current)).size;
+      } catch (error) {
+        // Atomic writers can rename a temporary file between readdir and stat.
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
     }
     return bytes;
   }

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EmptyState } from '@/components/shared/States';
+import { PlayerAvatar } from '@/components/shared/PlayerAvatar';
 import { usePlayers } from '@/hooks/usePlayers';
 import { cn } from '@/utils';
 import { toast } from 'sonner';
@@ -26,28 +27,12 @@ const TABS: { value: PlayerTab; label: string }[] = [
   { value: 'bannedips', label: 'Banned IPs' },
 ];
 
-function PlayerAvatar({ username, size = 8 }: { username: string; size?: number }) {
-  return (
-    <div className={cn(`w-${size} h-${size} rounded overflow-hidden bg-muted shrink-0`)}>
-      <img
-        src={`https://crafatar.com/avatars/${username}?size=32&overlay`}
-        alt={username}
-        className="w-full h-full object-cover"
-        onError={e => {
-          e.currentTarget.style.display = 'none';
-          e.currentTarget.parentElement!.textContent = username.slice(0, 2).toUpperCase();
-        }}
-      />
-    </div>
-  );
-}
-
 function PlayerRow({ player, actions }: { player: Player; actions?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-border/50 last:border-0">
-      <PlayerAvatar username={player.username} />
+      <PlayerAvatar username={player.username} uuid={player.uuid} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground">{player.username}</p>
+        <p className="text-sm font-medium text-foreground break-words">{player.username}</p>
         {player.online && (
           <p className="text-[10px] text-muted-foreground">
             {player.ping !== undefined && `${player.ping}ms · `}
@@ -305,7 +290,9 @@ export default function ServerPlayersTab() {
         description="The player will be disconnected from the server."
         confirmLabel="Kick Player"
         onConfirm={() => { if (confirmKick) { kick(confirmKick.username); toast.success(`${confirmKick.username} kicked`); setConfirmKick(null); } }}
-      />
+      >
+        {confirmKick && <PlayerRow player={confirmKick} />}
+      </ConfirmDialog>
 
       {/* Ban confirm */}
       <ConfirmDialog
@@ -317,6 +304,7 @@ export default function ServerPlayersTab() {
         destructive
         onConfirm={() => { if (confirmBan) { ban(confirmBan.username, banReason || undefined); toast.success(`${confirmBan.username} banned`); setConfirmBan(null); } }}
       >
+        {confirmBan && <PlayerRow player={confirmBan} />}
         <div className="mt-3">
           <label className="text-xs text-muted-foreground block mb-1">Reason (optional)</label>
           <Input value={banReason} onChange={e => setBanReason(e.target.value)} placeholder="Reason for ban" className="bg-input" />

@@ -1,3 +1,6 @@
+import { HostHistoryGraph } from '@/components/shared/HostHistoryGraph';
+import { PlayerAvatar } from '@/components/shared/PlayerAvatar';
+import { activityPlayerName } from '@/utils/playerAvatar';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -11,7 +14,7 @@ import { SkeletonCard } from '@/components/shared/States';
 import { ProgressBar } from '@/components/shared/ProgressBar';
 import { ExportServerDialog } from '@/components/server/ExportServerDialog';
 import { useServers } from '@/hooks/useServers';
-import { useHostStats, useActivity } from '@/hooks/useGlobal';
+import { useHostMonitor, useActivity } from '@/hooks/useGlobal';
 import { formatBytes, formatUptime, formatTimeAgo } from '@/utils';
 import type { ActivityEvent } from '@/types';
 
@@ -29,7 +32,7 @@ const CATEGORY_ICON: Record<string, React.ReactNode> = {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { servers, loading: serversLoading, startServer, stopServer, restartServer, killServer, deleteServer } = useServers();
-  const hostStats = useHostStats();
+  const { stats: hostStats, history: hostHistory } = useHostMonitor();
   const { activity } = useActivity();
   const [exportServerId, setExportServerId] = useState<string | null>(null);
 
@@ -139,6 +142,7 @@ export default function DashboardPage() {
                 {[1, 2, 3, 4].map(i => <div key={i} className="h-4 bg-muted rounded" />)}
               </div>
             )}
+            <HostHistoryGraph samples={hostHistory} />
           </div>
 
           {/* Recent activity */}
@@ -150,7 +154,7 @@ export default function DashboardPage() {
               ) : (
                 recentActivity.map((event: ActivityEvent) => (
                   <div key={event.id} className="flex items-start gap-2 text-xs">
-                    <span className="shrink-0 mt-0.5">{CATEGORY_ICON[event.category] ?? <Activity className="w-3.5 h-3.5 text-muted-foreground" />}</span>
+                    <span className="shrink-0 mt-0.5">{activityPlayerName(event) ? <PlayerAvatar username={activityPlayerName(event)!} className="w-3.5 h-3.5 text-[8px]" /> : CATEGORY_ICON[event.category] ?? <Activity className="w-3.5 h-3.5 text-muted-foreground" />}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-foreground truncate">{event.event}</p>
                       {event.serverName && <p className="text-muted-foreground text-[10px]">{event.serverName}</p>}

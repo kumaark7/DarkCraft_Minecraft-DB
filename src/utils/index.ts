@@ -127,9 +127,7 @@ export function truncate(str: string, len: number): string {
   return str.length > len ? `${str.slice(0, len)}...` : str;
 }
 
-export function playerAvatarUrl(username: string): string {
-  return `https://crafatar.com/avatars/${username}?size=32&overlay`;
-}
+export { playerAvatarUrl } from './playerAvatar';
 
 export function serverIconFallback(name: string): string {
   return name.slice(0, 2).toUpperCase();
