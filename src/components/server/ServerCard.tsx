@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Square, RotateCcw, Skull, Terminal, Settings, Download, MoreHorizontal, Trash2 } from 'lucide-react';
 import { cn, formatUptime, formatBytes } from '@/utils';
+import { formatServerAddress } from '@/utils/serverAddress';
 import { ServerIcon } from './ServerIcon';
 import { ServerStatusBadge } from './ServerStatusBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -77,7 +78,7 @@ export function ServerCard({ server, onStart, onStop, onRestart, onKill, onDelet
 
         {!compact && (
           <div className="text-xs text-muted-foreground mb-3">
-            <span>{server.ip}:{server.port}</span>
+            <span>{formatServerAddress(server)}</span>
             {server.status === 'ONLINE' && <span className="ml-2">· Up {formatUptime(server.uptime)}</span>}
           </div>
         )}

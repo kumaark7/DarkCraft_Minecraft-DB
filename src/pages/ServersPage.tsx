@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useServers } from '@/hooks/useServers';
 import { formatBytes, formatUptime, cn } from '@/utils';
+import { formatServerAddress } from '@/utils/serverAddress';
 import type { Server, ServerStatus } from '@/types';
 
 type View = 'card' | 'list';
@@ -262,7 +263,7 @@ export default function ServersPage() {
                       </td>
                       <td className="px-4 py-2.5"><ServerStatusBadge status={server.status} size="sm" /></td>
                       <td className="px-4 py-2.5 text-muted-foreground">{server.minecraftVersion}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground font-mono">{server.ip}:{server.port}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground font-mono">{formatServerAddress(server)}</td>
                       <td className="px-4 py-2.5">
                         <span className={cn(server.playerCount > 0 ? 'text-foreground' : 'text-muted-foreground')}>
                           {server.playerCount}/{server.maxPlayers}
@@ -394,7 +395,7 @@ function ServerCardFull({ server, onStart, onStop, onRestart, onKill, onExport, 
       </div>
 
       <div className="text-xs text-muted-foreground mb-3 font-mono">
-        {server.ip}:{server.port}
+        {formatServerAddress(server)}
         {server.status === 'ONLINE' && <span className="ml-2 font-sans">· {formatUptime(server.uptime)}</span>}
       </div>
 

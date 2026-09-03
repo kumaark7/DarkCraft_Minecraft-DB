@@ -7,6 +7,7 @@ import { ProgressBar } from '@/components/shared/ProgressBar';
 import { useServer } from '@/hooks/useServers';
 import { useActivity } from '@/hooks/useGlobal';
 import { formatBytes, formatUptime, formatTimeAgo, cn } from '@/utils';
+import { formatServerAddress } from '@/utils/serverAddress';
 import { useMetricHistory } from '@/hooks/useMetricHistory';
 import { PerformanceHistoryGraph } from '@/components/server/PerformanceHistoryGraph';
 
@@ -142,7 +143,7 @@ export default function ServerOverviewTab() {
           </h2>
           <div>
             <InfoRow label="Server Name" value={server.name} />
-            <InfoRow label="Address" value={`${server.ip}:${server.port}`} />
+            <InfoRow label="Address" value={formatServerAddress(server)} />
             <InfoRow label="Minecraft Version" value={server.minecraftVersion} />
             <InfoRow label="Server Software" value={server.software} />
             <InfoRow label="Java Version" value={server.javaVersion || 'N/A'} />

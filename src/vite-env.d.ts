@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_BASE_URL?: string;
+  readonly VITE_MINECRAFT_PUBLIC_HOST?: string;
   readonly VITE_DATA_SOURCE?: 'mock' | 'real';
 }
 
