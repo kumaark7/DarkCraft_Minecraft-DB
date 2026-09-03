@@ -1,19 +1,27 @@
 import { useState, useEffect, useCallback } from 'react';
 import { globalService } from '@/services';
-import type { AppNotification, HostStats, ActivityEvent, LogEntry, Bot } from '@/types';
-import { appendHostSample, hostSample, pollHostStats, type HostSample } from '@/utils/hostHistory';
+import type { AppNotification, HostStats, ActivityEvent, LogEntry, Bot, MetricHistoryRange } from '@/types';
+import { pollHostHistory, pollHostStats, type HostSample } from '@/utils/hostHistory';
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    const data = await globalService.getNotifications();
-    setNotifications(data);
-    setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = async () => {
+      try {
+        const data = await globalService.getNotifications();
+        if (!cancelled) setNotifications(data);
+      } catch { /* Retain the feed during transient failures; shared 401 handling applies. */ }
+      finally {
+        if (!cancelled) { setLoading(false); timer = setTimeout(() => void load(), 10_000); }
+      }
+    };
+    void load();
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   const markRead = useCallback(async (id: string) => {
     await globalService.markNotificationRead(id);
@@ -34,19 +42,19 @@ export function useNotifications() {
   };
 }
 
-export function useHostMonitor() {
+export function useHostMonitor(range: MetricHistoryRange = '1h') {
   const [stats, setStats] = useState<HostStats | null>(null);
-  const [history, setHistory] = useState<HostSample[]>([]);
+  const [snapshot, setSnapshot] = useState<{ range: MetricHistoryRange; samples: HostSample[]; error: boolean; loading: boolean }>({ range, samples: [], error: false, loading: true });
 
+  useEffect(() => pollHostStats(() => globalService.getHostStats(), setStats), []);
   useEffect(() => {
-    return pollHostStats(() => globalService.getHostStats(), data => {
-      setStats(data);
-      const sample = hostSample(data, Date.now());
-      setHistory(previous => appendHostSample(previous, sample));
+    setSnapshot({ range, samples: [], error: false, loading: true });
+    return pollHostHistory(() => globalService.getHostHistory(range), samples => {
+      setSnapshot(previous => ({ range, samples: samples ?? previous.samples, error: samples === null, loading: false }));
     });
-  }, []);
+  }, [range]);
 
-  return { stats, history };
+  return { stats, history: snapshot.range === range ? snapshot.samples : [], historyError: snapshot.range === range && snapshot.error, historyLoading: snapshot.range !== range || snapshot.loading };
 }
 
 export function useHostStats() {

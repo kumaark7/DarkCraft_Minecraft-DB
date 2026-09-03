@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { appendAlert } from './alerts.js';
 import type { ActivityEvent, ServerStatus } from '../src/types/index.js';
 import type { DashboardState } from './types.js';
 import type { JsonStore } from './store.js';
@@ -17,6 +18,10 @@ export function setServerStatus(state: DashboardState, serverId: string, status:
   const server = state.servers.find(item => item.id === serverId);
   if (!server || server.status === status) return;
   server.status = status;
+  if (status === 'CRASHED') appendAlert(state, {
+    type: 'server-crashed', severity: 'error', serverId, serverName: server.name,
+    title: `${server.name}: server crashed`, message: 'Minecraft exited unexpectedly. Open the persistent Console history for the startup or process error.',
+  });
   const descriptions: Partial<Record<ServerStatus, string>> = {
     STARTING: 'Server starting', ONLINE: 'Server started — online',
     STOPPING: 'Server stopping', OFFLINE: 'Server stopped', CRASHED: 'Server crashed',

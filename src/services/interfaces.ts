@@ -141,6 +141,7 @@ export interface IGlobalService {
   getActivity(filters?: { serverId?: string; category?: string }): Promise<ActivityEvent[]>;
   getLogs(filters?: { serverId?: string; severity?: string }): Promise<LogEntry[]>;
   getHostStats(): Promise<HostStats>;
+  getHostHistory(range: MetricHistoryRange): Promise<import('../types').HostMetricSample[]>;
   getNotifications(): Promise<AppNotification[]>;
   markNotificationRead(id: string): Promise<void>;
   markAllNotificationsRead(): Promise<void>;

@@ -63,6 +63,8 @@ import { readBannedIps, readPlayers } from './playerData.js';
 import { ConsoleLogStore } from './consoleLogStore.js';
 import { ModIssueStore } from './modIssues.js';
 import { MetricHistorySampler, MetricHistoryStore } from './metricHistory.js';
+import { HostHistoryStore, HostMonitor } from './hostHistory.js';
+import { notify, ResourceAlerts } from './alerts.js';
 
 interface AppContext {
   app: FastifyInstance;
@@ -75,6 +77,7 @@ interface AppContext {
   installerFetcher?: typeof fetch;
   installerRunner?: InstallerRunner;
   metricHistory: MetricHistoryStore;
+  hostMonitor: HostMonitor;
 }
 
 interface ImportCandidate {
@@ -184,6 +187,18 @@ function validateArchive(zip: AdmZip): void {
 }
 
 async function createBackup(context: AppContext, id: string): Promise<Backup> {
+  const server = serverById(context.store.get(), id);
+  try { return await writeBackup(context, id); } catch (error) {
+    await notify(context.store, { type: 'backup-failed', severity: 'error', serverId: id, serverName: server.name,
+      title: `${server.name}: backup failed`,
+      message: 'The backup could not be completed. Check disk space, file permissions and the backend log before retrying.',
+    }).catch(alertError => context.app.log.error(alertError, 'Could not persist backup failure alert'));
+    context.app.log.error(error, 'Backup failed');
+    throw error;
+  }
+}
+
+async function writeBackup(context: AppContext, id: string): Promise<Backup> {
   const root = await serverPath(context, id, '/');
   const backupRoot = await resolveInside(root, '/backups');
   await mkdir(backupRoot, { recursive: true });
@@ -209,7 +224,7 @@ async function createBackup(context: AppContext, id: string): Promise<Backup> {
 }
 
 function registerReadRoutes(context: AppContext): void {
-  const { app, store, processes, hostMetrics } = context;
+  const { app, store, processes, hostMonitor } = context;
   app.get('/api/v1/health', async () => ok({ status: 'ok', readOnly: context.config.readOnly }));
   app.get('/api/v1/software/catalog', async () => ok(await context.catalog.catalog()));
   app.get('/api/v1/software/catalog/:software/:minecraftVersion/builds', async (request) => {
@@ -280,10 +295,15 @@ function registerReadRoutes(context: AppContext): void {
   app.get('/api/v1/bots/:id', async (request) => ok(store.get().bots.find((item) => item.id === params(request).id) ?? null));
   app.get('/api/v1/settings', async () => ok(store.get().globalSettings));
   app.get('/api/v1/host/stats', async () => {
-    const total = os.totalmem(); const free = os.freemem();
-    const [disk, network] = await Promise.all([statfs(context.config.serversRoot), hostMetrics.networkRates()]);
-    const diskTotal = Number(disk.blocks * disk.bsize) / 1073741824; const diskFree = Number(disk.bavail * disk.bsize) / 1073741824;
-    return ok({ uptime: os.uptime(), cpuModel: os.cpus()[0]?.model ?? 'Unknown', cpuUsage: hostMetrics.cpuUsage(), ramTotal: total / 1048576, ramUsed: (total - free) / 1048576, diskTotal, diskUsed: diskTotal - diskFree, ...network });
+    const stats = hostMonitor.stats();
+    if (!stats) throw Object.assign(new Error('Host measurements are temporarily unavailable'), { statusCode: 503 });
+    return ok(stats);
+  });
+  app.get('/api/v1/host/metrics', async (request, reply) => {
+    const range = query(request).range ?? '1h';
+    if (range !== '15m' && range !== '1h' && range !== '6h' && range !== '24h') throw Object.assign(new Error('Invalid history range'), { statusCode: 400 });
+    reply.header('Cache-Control', 'private, no-store');
+    return ok(await hostMonitor.history.read(context.config.dataDir, range));
   });
 }
 
@@ -401,6 +421,7 @@ function registerScheduleWrites(context: AppContext): void {
 }
 
 async function runSchedule(context: AppContext, schedule: Schedule): Promise<void> {
+  writable(context.config);
   if (schedule.action === 'start-server') await context.processes.start(schedule.serverId);
   else if (schedule.action === 'stop-server') await context.processes.stop(schedule.serverId);
   else if (schedule.action === 'restart-server') await context.processes.restart(schedule.serverId);
@@ -504,6 +525,8 @@ interface BuildAppOptions {
   installerFetcher?: typeof fetch;
   installerRunner?: InstallerRunner;
   metricIntervalMs?: number;
+  hostCollector?: () => Promise<import('../src/types/index.js').HostStats>;
+  hostIntervalMs?: number;
 }
 
 export async function buildApp(config: BackendConfig, options: BuildAppOptions = {}): Promise<AppContext> {
@@ -517,13 +540,25 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
   const modIssues = new ModIssueStore();
   const processes = new ProcessManager(store, events, undefined, undefined, consoleLogs, modIssues, { tickQueriesEnabled: !config.readOnly });
   const metricHistory = new MetricHistoryStore();
-  const metricSampler = new MetricHistorySampler(metricHistory, async () => Promise.all(store.get().servers.map(async (server) => ({ directory: server.directory, stats: await processes.stats(server.id) }))), options.metricIntervalMs);
+  const resourceAlerts = new ResourceAlerts(store);
+  const metricSampler = new MetricHistorySampler(metricHistory, async () => Promise.all(store.get().servers.map(async (server) => {
+    const stats = await processes.stats(server.id);
+    await resourceAlerts.server(server.id, server.name, stats, server.status === 'ONLINE' || server.status === 'STARTING', Date.now());
+    return { directory: server.directory, stats };
+  })), options.metricIntervalMs);
   const hostMetrics = new HostMetricsSampler();
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test', bodyLimit: 16 * 1024 * 1024, trustProxy: true });
+  const hostMonitor = new HostMonitor(new HostHistoryStore(), config.dataDir, options.hostCollector ?? (async () => {
+    const total = os.totalmem(); const free = os.freemem();
+    const [disk, network] = await Promise.all([statfs(config.serversRoot), hostMetrics.networkRates()]);
+    const diskTotal = Number(disk.blocks * disk.bsize) / 1073741824;
+    const diskFree = Number(disk.bavail * disk.bsize) / 1073741824;
+    return { uptime: os.uptime(), cpuModel: os.cpus()[0]?.model ?? 'Unknown', cpuUsage: hostMetrics.cpuUsage(), ramTotal: total / 1048576, ramUsed: (total - free) / 1048576, diskTotal, diskUsed: diskTotal - diskFree, ...network };
+  }), (stats, now) => resourceAlerts.host(stats, now), error => app.log.error(error, 'Host monitoring failed'), options.hostIntervalMs);
   await app.register(multipart, { limits: { fileSize: 512 * 1024 * 1024, files: 1 } }); await app.register(websocket);
   const auth = await installAuthentication(app, config, { now: options.now, sessionTtlMs: options.sessionTtlMs, lockoutThreshold: options.lockoutThreshold });
   const catalog = new SoftwareCatalogService(path.join(config.dataDir, 'catalog', 'metadata.json'), options.catalogFetcher, options.now); await catalog.load();
-  const context = { app, store, processes, hostMetrics, auth, config, catalog, metricHistory, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner };
+  const context = { app, store, processes, hostMetrics, hostMonitor, auth, config, catalog, metricHistory, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner };
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
   registerModrinthRoutes(app, (id) => ({ ...serverById(store.get(), id) }), options.modrinthFetcher, options.now);
@@ -533,8 +568,13 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
     readOnly: () => config.readOnly,
     fetcher: options.modrinthFetcher,
   });
-  const scheduleRunner = new ScheduleRunner(store, (schedule) => runSchedule(context, schedule)); scheduleRunner.start();
+  const scheduleRunner = new ScheduleRunner(store, async schedule => {
+    try { await runSchedule(context, schedule); }
+    catch (error) { app.log.error(error, 'Scheduled task failed'); }
+  }); scheduleRunner.start();
   metricSampler.start();
+  hostMonitor.start();
+  await hostMonitor.sampleNow();
   app.get('/api/v1/servers/:id/console/stream', { websocket: true }, (socket, request) => {
     const id = params(request).id ?? ''; assertIdentifier(id);
     const session = auth.getRequestAuth(request);
@@ -546,7 +586,7 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
     socket.on('close', () => { clearTimeout(expiryTimer); unsubscribeSession(); unsubscribeConsole(); });
   });
   if (existsSync(config.frontendDist)) { await app.register(fastifyStatic, { root: config.frontendDist, wildcard: false }); app.setNotFoundHandler((request, reply) => request.url.startsWith('/api/') ? reply.code(404).send({ error: { code: 'NotFound', message: 'Endpoint not found' } }) : reply.sendFile('index.html')); }
-  app.addHook('onClose', async () => { scheduleRunner.stop(); await metricSampler.stop(); await processes.shutdown(); });
+  app.addHook('onClose', async () => { scheduleRunner.stop(); await hostMonitor.stop(); await metricSampler.stop(); await processes.shutdown(); });
   await recordActivity(store, { category: 'config-change', event: 'Dashboard backend started' });
   return context;
 }

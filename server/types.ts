@@ -23,6 +23,7 @@ export interface DashboardState {
   backups: Record<string, Backup[]>;
   schedules: Record<string, Schedule[]>;
   notifications: AppNotification[];
+  alertCooldowns?: Record<string, number>;
   bots: Bot[];
   activity: ActivityEvent[];
   logs: LogEntry[];

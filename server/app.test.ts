@@ -87,3 +87,35 @@ describe('backend API guarantees', () => {
     await context.app.close();
   });
 });
+
+  it('protects and serves persistent host history with validated ranges', async () => {
+    const cfg = await config(false);
+    const measured = { uptime: 5, cpuModel: 'Test CPU', cpuUsage: 12, ramTotal: 1000, ramUsed: 500, diskTotal: 100, diskUsed: 25, networkIn: null, networkOut: null };
+    const context = await buildApp(cfg, { hostCollector: async () => measured });
+    try {
+      expect((await context.app.inject({ method: 'GET', url: '/api/v1/host/metrics?range=1h' })).statusCode).toBe(401);
+      const headers = await authenticate(context);
+      const history = await context.app.inject({ method: 'GET', url: '/api/v1/host/metrics?range=1h', headers: { cookie: headers.cookie } });
+      expect(history.statusCode).toBe(200);
+      expect(history.json().data).toEqual([expect.objectContaining({ cpu: 12, ram: 500, ramPercent: 50 })]);
+      expect((await context.app.inject({ method: 'GET', url: '/api/v1/host/metrics?range=forever', headers: { cookie: headers.cookie } })).statusCode).toBe(400);
+    } finally { await context.app.close(); }
+  });
+
+  it('persists a cooldown-controlled notification when a backup fails', async () => {
+    const cfg = await config(false); const context = await buildApp(cfg);
+    try {
+      const headers = await authenticate(context); const directory = path.join(cfg.serversRoot, 'backup-alert');
+      await mkdir(directory, { recursive: true }); await writeFile(path.join(directory, 'backups'), 'blocks backup directory creation');
+      const server: ManagedServer = {
+        id: 'backup-alert', name: 'Backup Alert', status: 'OFFLINE', software: 'Fabric', minecraftVersion: '26.2', javaVersion: 'Java 25',
+        ip: '0.0.0.0', port: 25565, playerCount: 0, maxPlayers: 20, cpu: null, ram: null, ramMax: 4096,
+        disk: null, diskMax: null, uptime: 0, directory, startupCommand: 'java -jar fabric.jar', startupExecutable: 'java', startupArgs: ['-jar', 'fabric.jar'], createdAt: new Date().toISOString(),
+      };
+      await context.store.update(state => { state.servers.push(server); });
+      const failed = await context.app.inject({ method: 'POST', url: '/api/v1/servers/backup-alert/backups', headers });
+      expect(failed.statusCode).toBe(500);
+      const notifications = await context.app.inject({ method: 'GET', url: '/api/v1/notifications', headers: { cookie: headers.cookie } });
+      expect(notifications.json().data).toEqual([expect.objectContaining({ type: 'backup-failed', serverId: 'backup-alert', severity: 'error' })]);
+    } finally { await context.app.close(); }
+  });

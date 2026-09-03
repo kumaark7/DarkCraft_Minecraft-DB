@@ -16,10 +16,10 @@ export interface MetricHistoryOptions {
   compactionIntervalMs?: number;
 }
 
-export class MetricHistoryStore {
+export class MetricHistoryStore<T extends { timestamp: number } = ServerMetricSample> {
   private readonly retentionMs: number;
   private readonly maxBytes: number;
-  private readonly maxPoints: number;
+  protected readonly maxPoints: number;
   private readonly compactionIntervalMs: number;
   private readonly queues = new Map<string, Promise<void>>();
   private readonly lastCompactionAt = new Map<string, number>();
@@ -31,24 +31,24 @@ export class MetricHistoryStore {
     this.compactionIntervalMs = options.compactionIntervalMs ?? 15 * 60_000;
   }
 
-  private file(serverDirectory: string): string {
+  protected file(serverDirectory: string): string {
     return path.join(serverDirectory, '.darkcraft', 'metrics', 'history.ndjson');
   }
 
-  private async parse(serverDirectory: string): Promise<ServerMetricSample[]> {
+  private async parse(serverDirectory: string): Promise<T[]> {
     const content = await readFile(this.file(serverDirectory), 'utf8').catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return '';
       throw error;
     });
     return content.split(/\r?\n/).filter(Boolean).flatMap((line) => {
       try {
-        const sample = JSON.parse(line) as ServerMetricSample;
+        const sample = JSON.parse(line) as T;
         return Number.isFinite(sample.timestamp) ? [sample] : [];
       } catch { return []; }
     });
   }
 
-  append(serverDirectory: string, sample: ServerMetricSample, now = Date.now()): Promise<void> {
+  append(serverDirectory: string, sample: T, now = Date.now()): Promise<void> {
     const line = `${JSON.stringify(sample)}\n`;
     const previous = this.queues.get(serverDirectory) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(async () => {
@@ -59,7 +59,7 @@ export class MetricHistoryStore {
       if (periodicCompactionDue || size + Buffer.byteLength(line) > this.maxBytes) {
         let retained = (await this.parse(serverDirectory)).filter((value) => value.timestamp >= now - this.retentionMs);
         let content = retained.map((value) => JSON.stringify(value)).join('\n') + (retained.length ? '\n' : '');
-        while (retained.length > 1 && Buffer.byteLength(content) + Buffer.byteLength(line) > this.maxBytes) {
+        while (retained.length > 0 && Buffer.byteLength(content) + Buffer.byteLength(line) > this.maxBytes) {
           retained = retained.slice(Math.max(1, Math.floor(retained.length / 4)));
           content = retained.map((value) => JSON.stringify(value)).join('\n') + (retained.length ? '\n' : '');
         }
@@ -76,9 +76,13 @@ export class MetricHistoryStore {
     return next;
   }
 
-  async read(serverDirectory: string, range: MetricHistoryRange, now = Date.now()): Promise<ServerMetricSample[]> {
+  async read(serverDirectory: string, range: MetricHistoryRange, now = Date.now()): Promise<T[]> {
     await (this.queues.get(serverDirectory) ?? Promise.resolve());
-    const samples = (await this.parse(serverDirectory)).filter((sample) => sample.timestamp >= now - RANGE_MS[range]);
+    const samples = (await this.parse(serverDirectory)).filter((sample) => sample.timestamp >= now - RANGE_MS[range] && sample.timestamp <= now);
+    return this.downsample(samples);
+  }
+
+  protected downsample(samples: T[]): T[] {
     if (samples.length <= this.maxPoints) return samples;
     const stride = Math.ceil(samples.length / this.maxPoints);
     const downsampled = samples.filter((_sample, index) => index % stride === 0);

@@ -16,7 +16,7 @@ import { ExportServerDialog } from '@/components/server/ExportServerDialog';
 import { useServers } from '@/hooks/useServers';
 import { useHostMonitor, useActivity } from '@/hooks/useGlobal';
 import { formatBytes, formatUptime, formatTimeAgo } from '@/utils';
-import type { ActivityEvent } from '@/types';
+import type { ActivityEvent, MetricHistoryRange } from '@/types';
 
 const CATEGORY_ICON: Record<string, React.ReactNode> = {
   'server-start': <CheckCircle2 className="w-3.5 h-3.5 text-primary" />,
@@ -32,7 +32,8 @@ const CATEGORY_ICON: Record<string, React.ReactNode> = {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { servers, loading: serversLoading, startServer, stopServer, restartServer, killServer, deleteServer } = useServers();
-  const { stats: hostStats, history: hostHistory } = useHostMonitor();
+  const [hostRange, setHostRange] = useState<MetricHistoryRange>('1h');
+  const { stats: hostStats, history: hostHistory, historyError, historyLoading } = useHostMonitor(hostRange);
   const { activity } = useActivity();
   const [exportServerId, setExportServerId] = useState<string | null>(null);
 
@@ -142,7 +143,7 @@ export default function DashboardPage() {
                 {[1, 2, 3, 4].map(i => <div key={i} className="h-4 bg-muted rounded" />)}
               </div>
             )}
-            <HostHistoryGraph samples={hostHistory} />
+            <HostHistoryGraph key={hostRange} samples={hostHistory} range={hostRange} onRangeChange={setHostRange} loading={historyLoading} error={historyError} />
           </div>
 
           {/* Recent activity */}

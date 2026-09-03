@@ -1,3 +1,13 @@
+export interface HostMetricSample {
+  timestamp: number;
+  cpu: number | null;
+  ram: number | null;
+  ramTotal: number | null;
+  ramPercent: number | null;
+  /** True when omitted/missing observations must not be connected by a line. */
+  gapBefore?: boolean;
+}
+
 // ============================================================
 // Core domain types — portable, no backend dependency
 // ============================================================

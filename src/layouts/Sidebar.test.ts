@@ -37,3 +37,11 @@ describe('Sidebar logout placement', () => {
     }
   });
 });
+
+  it('provides the public BlueMap shortcut in desktop, collapsed and mobile navigation', () => {
+    for (const mode of ['expanded', 'collapsed', 'mobile']) {
+      fixture.collapsed = mode === 'collapsed';
+      const html = renderToStaticMarkup(createElement(StaticRouter, { location: '/' }, createElement(mode === 'mobile' ? MobileSidebar : Sidebar)));
+      expect(html).toContain('href="https://minecraft.projectdarkhope.xyz/"'); expect(html).toContain('target="_blank"'); expect(html).toContain('rel="noopener noreferrer"');
+    }
+  });

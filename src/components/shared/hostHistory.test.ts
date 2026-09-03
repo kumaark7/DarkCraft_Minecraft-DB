@@ -57,6 +57,17 @@ describe('live host monitor', () => {
     expect(graphKeyIndex('Tab', 0, 6)).toBeNull();
     expect(graphKeyIndex('Home', 0, 0)).toBeNull();
   });
+  it('renders server-backed range controls and preserves explicit downsampled gaps', () => {
+    const change = vi.fn();
+    const samples = [{ ...hostSample(stats, 0) }, { ...hostSample(stats, 1000), gapBefore: true }, { ...hostSample(stats, 2000) }];
+    expect(hostPaths(samples, 'cpu', 900_000)).toHaveLength(2);
+    const html = renderToStaticMarkup(createElement(HostHistoryGraph, { samples, range: '24h', onRangeChange: change, error: true }));
+    expect(html).toContain('Host history time range');
+    expect(html).toContain('aria-label="Host CPU and RAM usage over the last 24h"');
+    expect(html).toContain('saved on the server');
+    expect(html).toContain('History unavailable');
+    for (const range of ['15m', '1h', '6h', '24h']) expect(html).toContain(`>${range}</button>`);
+  });
   it('explains empty and failed samples instead of drawing fake data', () => {
     expect(renderToStaticMarkup(createElement(HostHistoryGraph, { samples: [] }))).toContain('Waiting for real host measurements');
     const html = renderToStaticMarkup(createElement(HostHistoryGraph, { samples: [hostSample(null, 0)] }));

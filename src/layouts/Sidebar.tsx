@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Bot, Activity, ScrollText,
-  Bell, Settings, ChevronLeft, ChevronRight, X, LogOut
+  Bell, Settings, ChevronLeft, ChevronRight, X, LogOut, Map
 } from 'lucide-react';
 import { cn } from '@/utils';
 import { useLayout } from './LayoutContext';
@@ -111,6 +111,11 @@ function SidebarContent({ collapsed, onItemClick }: { collapsed: boolean; onItem
           </div>
         ))}
         <div className="border-t border-border pt-3">
+          <a href="https://minecraft.projectdarkhope.xyz/" target="_blank" rel="noopener noreferrer" onClick={onItemClick}
+            aria-label="BlueMap — opens public map in a new tab" title={collapsed ? 'BlueMap' : undefined}
+            className={cn('mb-3 flex items-center gap-2.5 px-2 py-2 rounded text-sm text-sidebar-foreground hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', collapsed && 'justify-center px-0')}>
+            <Map className="w-4 h-4 shrink-0" aria-hidden="true" />{!collapsed && <span>BlueMap ↗</span>}
+          </a>
           <button type="button" onClick={() => { void logout(); onItemClick?.(); }} className={cn('w-full flex items-center gap-2.5 px-2 py-2 rounded text-sm text-destructive bg-destructive/10 hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-destructive transition-colors', collapsed && 'justify-center px-0')} aria-label="Log out" title={collapsed ? 'Log out' : undefined}>
             <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
             {!collapsed && <span>Log out</span>}

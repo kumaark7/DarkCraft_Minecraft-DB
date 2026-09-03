@@ -475,6 +475,7 @@ export const globalService: IGlobalService = {
   },
   async getLogs() { await delay(300); return [...MOCK_LOGS]; },
   async getHostStats() { await delay(200); return { ...MOCK_HOST_STATS, cpuUsage: Math.max(10, Math.min(90, MOCK_HOST_STATS.cpuUsage + (Math.random() - 0.5) * 10)) }; },
+  async getHostHistory() { return []; },
   async getNotifications() { await delay(200); return [..._notifications]; },
   async markNotificationRead(id) {
     await delay(100);
