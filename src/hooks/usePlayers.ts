@@ -49,13 +49,13 @@ export function usePlayers(serverId: string) {
     await load();
   }, [serverId, load]);
 
-  const addWhitelist = useCallback(async (username: string) => {
-    await playerService.addWhitelistPlayer(serverId, username);
+  const addWhitelist = useCallback(async (username: string, edition: 'java' | 'bedrock' = 'java') => {
+    await playerService.addWhitelistPlayer(serverId, username, edition);
     await load();
   }, [serverId, load]);
 
-  const removeWhitelist = useCallback(async (username: string) => {
-    await playerService.removeWhitelistPlayer(serverId, username);
+  const removeWhitelist = useCallback(async (username: string, edition: 'java' | 'bedrock' = 'java', uuid?: string) => {
+    await playerService.removeWhitelistPlayer(serverId, username, edition, uuid);
     await load();
   }, [serverId, load]);
 

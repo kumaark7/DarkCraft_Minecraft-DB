@@ -27,6 +27,9 @@ const TABS: { value: PlayerTab; label: string }[] = [
   { value: 'bannedips', label: 'Banned IPs' },
 ];
 
+type PlayerEdition = 'java' | 'bedrock';
+const isBedrockPlayer = (player: Player) => /^00000000-0000-0000-0009-[0-9a-f]{12}$/i.test(player.uuid);
+
 function PlayerRow({ player, actions }: { player: Player; actions?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-border/50 last:border-0">
@@ -57,6 +60,8 @@ export default function ServerPlayersTab() {
   const [addOpOpen, setAddOpOpen] = useState(false);
   const [addWlOpen, setAddWlOpen] = useState(false);
   const [inputName, setInputName] = useState('');
+  const [whitelistEdition, setWhitelistEdition] = useState<PlayerEdition>('java');
+  const [whitelistSaving, setWhitelistSaving] = useState(false);
   const [whitelistEnabled, setWhitelistEnabled] = useState(true);
   const [confirmKick, setConfirmKick] = useState<Player | null>(null);
   const [confirmBan, setConfirmBan] = useState<Player | null>(null);
@@ -70,9 +75,16 @@ export default function ServerPlayersTab() {
   };
   const handleAddWl = async () => {
     if (!inputName.trim()) return;
-    await addWhitelist(inputName.trim());
-    toast.success(`${inputName} added to whitelist`);
-    setInputName(''); setAddWlOpen(false);
+    setWhitelistSaving(true);
+    try {
+      await addWhitelist(inputName.trim(), whitelistEdition);
+      toast.success(`${inputName.trim()} added to whitelist`);
+      setInputName(''); setAddWlOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update the whitelist');
+    } finally {
+      setWhitelistSaving(false);
+    }
   };
 
   return (
@@ -156,7 +168,7 @@ export default function ServerPlayersTab() {
           <div className="bg-card border border-border rounded p-4">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Members ({whitelist.length})</p>
-              <Button size="sm" variant="secondary" className="h-7 text-xs gap-1" onClick={() => { setInputName(''); setAddWlOpen(true); }}>
+              <Button size="sm" variant="secondary" className="h-7 text-xs gap-1" onClick={() => { setInputName(''); setWhitelistEdition('java'); setAddWlOpen(true); }}>
                 <Plus className="w-3 h-3" /> Add Player
               </Button>
             </div>
@@ -168,7 +180,14 @@ export default function ServerPlayersTab() {
                   key={p.username}
                   player={p}
                   actions={
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1 text-destructive" onClick={() => { removeWhitelist(p.username); toast.success(`${p.username} removed from whitelist`); }}>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1 text-destructive" onClick={async () => {
+                      try {
+                        await removeWhitelist(p.username, isBedrockPlayer(p) ? 'bedrock' : 'java', p.uuid);
+                        toast.success(`${p.username} removed from whitelist`);
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : 'Could not update the whitelist');
+                      }
+                    }}>
                       <Minus className="w-3 h-3" /> Remove
                     </Button>
                   }
@@ -269,14 +288,40 @@ export default function ServerPlayersTab() {
       </Dialog>
 
       {/* Add Whitelist dialog */}
-      <Dialog open={addWlOpen} onOpenChange={setAddWlOpen}>
+      <Dialog open={addWlOpen} onOpenChange={(open) => { if (!whitelistSaving) setAddWlOpen(open); }}>
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-sm bg-card border-border">
           <DialogHeader><DialogTitle>Add to Whitelist</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <Input autoFocus value={inputName} onChange={e => setInputName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddWl()} placeholder="Minecraft username" className="bg-input" />
+          <div className="space-y-4">
+            <fieldset className="space-y-2">
+              <legend className="text-xs text-muted-foreground">Player edition</legend>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Player edition">
+                {(['java', 'bedrock'] as const).map((edition) => (
+                  <Button
+                    key={edition}
+                    type="button"
+                    variant={whitelistEdition === edition ? 'default' : 'secondary'}
+                    role="radio"
+                    aria-checked={whitelistEdition === edition}
+                    onClick={() => setWhitelistEdition(edition)}
+                    disabled={whitelistSaving}
+                  >
+                    {edition === 'java' ? 'Java' : 'Bedrock'}
+                  </Button>
+                ))}
+              </div>
+              {whitelistEdition === 'bedrock' && (
+                <p className="text-xs text-muted-foreground">Enter the Xbox gamertag with its exact capitalization. DarkCraft applies this server's Floodgate prefix.</p>
+              )}
+            </fieldset>
+            <div>
+              <label htmlFor="whitelist-username" className="text-xs text-muted-foreground block mb-1.5">
+                {whitelistEdition === 'bedrock' ? 'Xbox gamertag' : 'Minecraft username'}
+              </label>
+              <Input id="whitelist-username" autoFocus value={inputName} onChange={e => setInputName(e.target.value)} onKeyDown={e => e.key === 'Enter' && void handleAddWl()} placeholder={whitelistEdition === 'bedrock' ? 'e.g. Nocturne17Dani' : 'e.g. KeerDubi'} className="bg-input" disabled={whitelistSaving} />
+            </div>
             <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setAddWlOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddWl} disabled={!inputName.trim()}>Add Player</Button>
+              <Button variant="secondary" onClick={() => setAddWlOpen(false)} disabled={whitelistSaving}>Cancel</Button>
+              <Button onClick={handleAddWl} disabled={!inputName.trim() || whitelistSaving}>{whitelistSaving ? 'Adding…' : 'Add Player'}</Button>
             </div>
           </div>
         </DialogContent>

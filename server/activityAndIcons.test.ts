@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { appendActivity, playerPresence, setServerStatus } from './activity.js';
+import { appendActivity, isRuntimePlayerName, playerPresence, setServerStatus } from './activity.js';
 import { buildApp } from './app.js';
 import { totpAt } from './authCrypto.js';
 import { JsonStore } from './store.js';
@@ -28,10 +28,14 @@ async function fixture() {
     "console.log('[Server thread/INFO]: Steve joined the game');",
     "console.log('[Server thread/INFO]: Steve joined the game');",
     "console.log('[Server thread/INFO]: <Alex> Fake joined the game');",
-    "console.log('[Server thread/INFO]: There are 2 of a max of 20 players online: Steve, Alex');",
+    "console.log('[Server thread/INFO]: .Nocturne17Dani joined the game');",
+    "console.log('[Server thread/INFO]: .Nocturne17Dani joined the game');",
+    "console.log('[Server thread/INFO]: There are 3 of a max of 20 players online: Steve, Alex, .Nocturne17Dani');",
     "console.log('[Server thread/INFO]: Steve left the game');",
     "console.log('[Server thread/INFO]: Steve left the game');",
     "console.log('[Server thread/INFO]: evidence complete');",
+    "console.log('[Server thread/INFO]: .Nocturne17Dani left the game');",
+    "console.log('[Server thread/INFO]: .Nocturne17Dani left the game');",
     "} } })",
   ].join(';');
   for (const id of ['one', 'two']) {
@@ -69,11 +73,14 @@ describe('runtime activity', () => {
       await waitFor(() => context.store.get().servers[0]?.status === 'ONLINE');
       context.processes.sendCommand('one', 'evidence');
       await waitFor(() => context.processes.getHistory('one').some(entry => entry.message.includes('evidence complete')));
+      await waitFor(() => context.store.get().activity.filter(event => event.category.startsWith('player-')).length === 4);
       await context.store.save();
       const response = await context.app.inject({ method: 'GET', url: '/api/v1/activity', headers });
       const activity = response.json().data;
       expect(activity.filter((event: { category: string }) => event.category.startsWith('player-'))).toEqual([
+        expect.objectContaining({ category: 'player-leave', actor: '.Nocturne17Dani', serverId: 'one' }),
         expect.objectContaining({ category: 'player-leave', actor: 'Steve', serverId: 'one' }),
+        expect.objectContaining({ category: 'player-join', actor: '.Nocturne17Dani', serverId: 'one' }),
         expect.objectContaining({ category: 'player-join', actor: 'Steve', serverId: 'one' }),
       ]);
       await context.processes.updateRuntimeState('one', '[Server thread/INFO]: Done (1s)! For help, type "help"');
@@ -84,7 +91,7 @@ describe('runtime activity', () => {
     await recovered.load();
     const activity = recovered.get().activity.filter(event => event.serverId === 'one');
     expect(activity.map(event => event.category)).toEqual([
-      'server-stop', 'server-stop', 'player-leave', 'player-join', 'server-start', 'server-start',
+      'server-stop', 'server-stop', 'player-leave', 'player-leave', 'player-join', 'player-join', 'server-start', 'server-start',
     ]);
     expect(activity[0]?.event).toBe('Server stopped');
     expect(activity.every(event => event.serverName === 'Server one' && Number.isFinite(Date.parse(event.timestamp)))).toBe(true);
@@ -110,10 +117,14 @@ describe('runtime activity', () => {
     expect(playerPresence('[12:34:56] [Server thread/INFO]: Alex joined the game')).toEqual({ username: 'Alex', online: true });
     expect(playerPresence('[12:34:56 INFO]: Alex left the game')).toEqual({ username: 'Alex', online: false });
     for (const line of ['> say Alex joined the game', '[INFO]: <Steve> Alex joined the game', '[INFO]: Warning: Alex left the game', '[INFO]: Alex lost connection: Disconnected']) {
+    expect(playerPresence('[12:34:56] [Server thread/INFO]: .Nocturne17Dani joined the game')).toEqual({ username: '.Nocturne17Dani', online: true });
+    expect(playerPresence('[12:34:56] [Server thread/INFO]: .Nocturne17Dani left the game')).toEqual({ username: '.Nocturne17Dani', online: false });
+    expect(isRuntimePlayerName('.Nocturne17Dani')).toBe(true);
       expect(playerPresence(line)).toBeNull();
     }
     const state = emptyState();
     for (let i = 0; i < 1001; i++) appendActivity(state, { category: 'config-change', event: String(i) });
+    for (const name of ['', 'name with spaces', '<ChatName>', 'logger:name']) expect(isRuntimePlayerName(name)).toBe(false);
     expect(state.activity).toHaveLength(1000);
     expect(state.activity[0]?.event).toBe('1000');
     setServerStatus(state, 'missing', 'OFFLINE');

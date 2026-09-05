@@ -31,4 +31,11 @@ describe('Minecraft player JSON sources', () => {
     expect(refreshed.find((player) => player.username === 'Steve')?.isOp).toBe(false);
     expect(refreshed.find((player) => player.username === 'Alex')?.isOp).toBe(true);
   });
+
+  it('lets authoritative whitelist casing replace stale usercache casing', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'darkcraft-player-case-')); temporary.push(directory);
+    await writeFile(path.join(directory, 'usercache.json'), JSON.stringify([{ name: '.nocturne17dani', uuid: 'floodgate-uuid' }]));
+    await writeFile(path.join(directory, 'whitelist.json'), JSON.stringify([{ name: '.Nocturne17Dani', uuid: 'floodgate-uuid' }]));
+    expect(await readPlayers(directory)).toEqual([expect.objectContaining({ username: '.Nocturne17Dani', isWhitelisted: true })]);
+  });
 });

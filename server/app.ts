@@ -65,6 +65,16 @@ import { ModIssueStore } from './modIssues.js';
 import { MetricHistorySampler, MetricHistoryStore } from './metricHistory.js';
 import { HostHistoryStore, HostMonitor } from './hostHistory.js';
 import { notify, ResourceAlerts } from './alerts.js';
+import {
+  isFloodgateUuid,
+  isUuid,
+  offlineJavaProfile,
+  readFloodgatePrefix,
+  resolveBedrockProfile,
+  serverUsesOfflineProfiles,
+  updateBedrockWhitelist,
+  type BedrockProfile,
+} from './bedrockWhitelist.js';
 
 interface AppContext {
   app: FastifyInstance;
@@ -78,6 +88,7 @@ interface AppContext {
   installerRunner?: InstallerRunner;
   metricHistory: MetricHistoryStore;
   hostMonitor: HostMonitor;
+  bedrockFetcher?: typeof fetch;
 }
 
 interface ImportCandidate {
@@ -372,9 +383,65 @@ function registerWriteRoutes(context: AppContext): void {
     }
     return ok(settings);
   });
-  app.post('/api/v1/servers/:id/console/commands', async (request) => { guard(); processes.sendCommand(params(request).id ?? '', body<{ command: string }>(request).command); return ok(null); });
+  app.post('/api/v1/servers/:id/console/commands', async (request) => {
+    guard();
+    const id = params(request).id ?? '';
+    const command = body<{ command: string }>(request).command;
+    const floodgate = typeof command === 'string'
+      ? /^\s*fwhitelist\s+(add|remove)\s+(?:"([^"\r\n]+)"|([^\r\n]+))\s*$/i.exec(command)
+      : null;
+    const javaWhitelist = typeof command === 'string'
+      ? /^\s*whitelist\s+(add|remove)\s+([A-Za-z0-9_]{1,16})\s*$/i.exec(command)
+      : null;
+    if (floodgate) {
+      processes.recordEmulatedCommand(id, command);
+      await bedrockWhitelistAction(context, id, floodgate[1]!.toLowerCase() as 'add' | 'remove', floodgate[2] ?? floodgate[3] ?? '');
+    } else if (javaWhitelist && await serverUsesOfflineProfiles(serverById(store.get(), id).directory)) {
+      processes.recordEmulatedCommand(id, command);
+      await offlineJavaWhitelistAction(
+        context, id, javaWhitelist[1]!.toLowerCase() as 'add' | 'remove', javaWhitelist[2]!,
+      );
+    } else {
+      processes.sendCommand(id, command);
+    }
+    return ok(null);
+  });
   app.delete('/api/v1/servers/:id/console', async (request) => { guard(); await processes.clearHistory(params(request).id ?? ''); return ok(null); });
   registerPlayerWrites(context); registerFileWrites(context); registerBackupWrites(context); registerScheduleWrites(context); registerGlobalWrites(context);
+}
+
+async function bedrockWhitelistAction(
+  context: AppContext,
+  id: string,
+  operation: 'add' | 'remove',
+  username: string,
+  knownProfile?: BedrockProfile,
+): Promise<void> {
+  const server = serverById(context.store.get(), id);
+  const profile = knownProfile ?? await resolveBedrockProfile(server.directory, username, context.bedrockFetcher);
+  await whitelistProfileAction(context, id, operation, profile);
+}
+
+async function offlineJavaWhitelistAction(
+  context: AppContext,
+  id: string,
+  operation: 'add' | 'remove',
+  username: string,
+  knownProfile?: BedrockProfile,
+): Promise<void> {
+  const server = serverById(context.store.get(), id);
+  if (!await serverUsesOfflineProfiles(server.directory)) throw Object.assign(new Error('Server is not using offline Java profiles'), { statusCode: 409 });
+  await whitelistProfileAction(context, id, operation, knownProfile ?? offlineJavaProfile(username));
+}
+
+async function whitelistProfileAction(context: AppContext, id: string, operation: 'add' | 'remove', profile: BedrockProfile): Promise<void> {
+  const server = serverById(context.store.get(), id);
+  await updateBedrockWhitelist(server.directory, operation, profile);
+  if (server.status === 'ONLINE' || server.status === 'STARTING') {
+    try { context.processes.sendCommand(id, 'whitelist reload'); }
+    catch (error) { if ((error as { statusCode?: number }).statusCode !== 409) throw error; }
+  }
+  await recordActivity(context.store, { serverId: id, serverName: server.name, category: 'whitelist-change', event: `${profile.name} ${operation === 'add' ? 'added to' : 'removed from'} the whitelist`, actor: 'Dashboard' });
 }
 
 function registerPlayerWrites(context: AppContext): void {
@@ -387,8 +454,39 @@ function registerPlayerWrites(context: AppContext): void {
   app.post('/api/v1/servers/:id/players/unban', action((u) => `pardon ${u}`, (ps, u) => ps.map((p) => p.username === u ? { ...p, isBanned: false } : p)));
   app.post('/api/v1/servers/:id/players/op', action((u) => `op ${u}`, (ps, u) => ps.map((p) => p.username === u ? { ...p, isOp: true } : p)));
   app.post('/api/v1/servers/:id/players/deop', action((u) => `deop ${u}`, (ps, u) => ps.map((p) => p.username === u ? { ...p, isOp: false } : p)));
-  app.post('/api/v1/servers/:id/players/whitelist', action((u) => `whitelist add ${u}`, (ps, u) => ps.map((p) => p.username === u ? { ...p, isWhitelisted: true } : p)));
-  app.delete('/api/v1/servers/:id/players/whitelist', action((u) => `whitelist remove ${u}`, (ps, u) => ps.map((p) => p.username === u ? { ...p, isWhitelisted: false } : p)));
+  const whitelist = (operation: 'add' | 'remove') => async (request: { params: unknown; body: unknown }) => {
+    writable(config);
+    const id = params(request).id ?? '';
+    const input = body<{ username: string; edition?: 'java' | 'bedrock'; uuid?: string }>(request);
+    assertFileName(input.username);
+    if (input.edition !== 'bedrock') {
+      const server = serverById(store.get(), id);
+      if (await serverUsesOfflineProfiles(server.directory)) {
+        const knownProfile = operation === 'remove' && isUuid(input.uuid)
+          ? { uuid: input.uuid, name: input.username }
+          : undefined;
+        await offlineJavaWhitelistAction(context, id, operation, input.username, knownProfile);
+        return ok(null);
+      }
+      const handler = action(
+        (u) => `whitelist ${operation} ${u}`,
+        (players, name) => players.map((player) => player.username === name ? { ...player, isWhitelisted: operation === 'add' } : player),
+      );
+      return handler(request);
+    }
+    let knownProfile: BedrockProfile | undefined;
+    if (operation === 'remove' && isFloodgateUuid(input.uuid)) {
+      const prefix = await readFloodgatePrefix(serverById(store.get(), id).directory);
+      knownProfile = {
+        uuid: input.uuid,
+        name: input.username.startsWith(prefix) ? input.username : `${prefix}${input.username}`,
+      };
+    }
+    await bedrockWhitelistAction(context, id, operation, input.username, knownProfile);
+    return ok(null);
+  };
+  app.post('/api/v1/servers/:id/players/whitelist', whitelist('add'));
+  app.delete('/api/v1/servers/:id/players/whitelist', whitelist('remove'));
   app.post('/api/v1/servers/:id/banned-ips/unban', async (request) => { writable(config); const id = params(request).id ?? ''; const ip = body<{ ip: string }>(request).ip; processes.sendCommand(id, `pardon-ip ${ip}`); await store.update((state) => { state.bannedIPs[id] = (state.bannedIPs[id] ?? []).filter((item) => item.ip !== ip); }); return ok(null); });
 }
 
@@ -527,6 +625,7 @@ interface BuildAppOptions {
   metricIntervalMs?: number;
   hostCollector?: () => Promise<import('../src/types/index.js').HostStats>;
   hostIntervalMs?: number;
+  bedrockFetcher?: typeof fetch;
 }
 
 export async function buildApp(config: BackendConfig, options: BuildAppOptions = {}): Promise<AppContext> {
@@ -558,7 +657,7 @@ export async function buildApp(config: BackendConfig, options: BuildAppOptions =
   await app.register(multipart, { limits: { fileSize: 512 * 1024 * 1024, files: 1 } }); await app.register(websocket);
   const auth = await installAuthentication(app, config, { now: options.now, sessionTtlMs: options.sessionTtlMs, lockoutThreshold: options.lockoutThreshold });
   const catalog = new SoftwareCatalogService(path.join(config.dataDir, 'catalog', 'metadata.json'), options.catalogFetcher, options.now); await catalog.load();
-  const context = { app, store, processes, hostMetrics, hostMonitor, auth, config, catalog, metricHistory, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner };
+  const context = { app, store, processes, hostMetrics, hostMonitor, auth, config, catalog, metricHistory, installerFetcher: options.installerFetcher, installerRunner: options.installerRunner, bedrockFetcher: options.bedrockFetcher };
   app.setErrorHandler((error, _request, reply) => { const issue = error as Error & { statusCode?: number }; const status = Number(issue.statusCode ?? (issue instanceof SecurityError ? 400 : 500)); reply.code(status).send({ error: { code: issue.name, message: issue.message } }); });
   registerReadRoutes(context); registerWriteRoutes(context); registerImportsAndExports(context); registerPluginWrites(context);
   registerModrinthRoutes(app, (id) => ({ ...serverById(store.get(), id) }), options.modrinthFetcher, options.now);

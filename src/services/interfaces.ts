@@ -76,8 +76,8 @@ export interface IPlayerService {
   opPlayer(id: string, username: string): Promise<void>;
   deopPlayer(id: string, username: string): Promise<void>;
   getWhitelist(id: string): Promise<Player[]>;
-  addWhitelistPlayer(id: string, username: string): Promise<void>;
-  removeWhitelistPlayer(id: string, username: string): Promise<void>;
+  addWhitelistPlayer(id: string, username: string, edition?: 'java' | 'bedrock'): Promise<void>;
+  removeWhitelistPlayer(id: string, username: string, edition?: 'java' | 'bedrock', uuid?: string): Promise<void>;
   getOperators(id: string): Promise<Player[]>;
   getBannedPlayers(id: string): Promise<Player[]>;
   getBannedIPs(id: string): Promise<BannedIP[]>;

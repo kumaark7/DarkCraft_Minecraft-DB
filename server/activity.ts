@@ -33,9 +33,15 @@ export function setServerStatus(state: DashboardState, serverId: string, status:
   });
 }
 
+export function isRuntimePlayerName(value: string): boolean {
+  // Java names use [A-Za-z0-9_]; Floodgate may prepend a configured symbol such as ".".
+  // Names containing whitespace, chat brackets, or logger separators cannot be presence evidence.
+  return /^[^\s<>:]{1,64}$/.test(value);
+}
+
 export function playerPresence(message: string): { username: string; online: boolean } | null {
   const line = message.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
   // Anchor the entire server message: chat/console commands quoting join text are not evidence.
-  const match = /^(?:\[[^\]\r\n]+\]\s*)*(?::\s*)?([A-Za-z0-9_]{1,16}) (joined|left) the game\s*$/.exec(line);
-  return match ? { username: match[1]!, online: match[2] === 'joined' } : null;
+  const match = /^(?:\[[^\]\r\n]+\]\s*)*(?::\s*)?([^\s<>:]{1,64}) (joined|left) the game\s*$/.exec(line);
+  return match && isRuntimePlayerName(match[1]!) ? { username: match[1]!, online: match[2] === 'joined' } : null;
 }

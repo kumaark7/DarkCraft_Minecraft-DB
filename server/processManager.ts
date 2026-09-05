@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { RuntimeMetrics, type RuntimeMetricsOptions } from './runtimeMetrics.js';
-import { appendActivity, playerPresence, setServerStatus } from './activity.js';
+import { appendActivity, isRuntimePlayerName, playerPresence, setServerStatus } from './activity.js';
 import { readFile, readdir, stat, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import pidusage from 'pidusage';
@@ -150,7 +150,7 @@ export class ProcessManager {
   private async updateListedPlayers(serverId: string, message: string): Promise<void> {
     const match = /There are\s+(\d+)\s+of(?:\s+a max of)?\s+(\d+)\s+players online:?\s*(.*)$/i.exec(message);
     if (!match) return;
-    const usernames = (match[3] ?? '').split(',').map((name) => name.trim()).filter((name) => /^[A-Za-z0-9_]{1,16}$/.test(name));
+    const usernames = (match[3] ?? '').split(',').map((name) => name.trim()).filter(isRuntimePlayerName);
     await this.store.update((state) => {
       const players = (state.players[serverId] ?? []).map((player) => ({ ...player, online: false }));
       for (const username of usernames) {
@@ -309,6 +309,15 @@ export class ProcessManager {
       throw Object.assign(new Error('Invalid console command'), { statusCode: 400 });
     }
     runtime.process.stdin.write(`${command}\n`);
+    this.record(serverId, `> ${command}`, 'LIVE', 'command');
+  }
+
+  recordEmulatedCommand(serverId: string, command: string): void {
+    if (command.includes('\n') || command.includes('\r') || command.length > 1024) {
+      throw Object.assign(new Error('Invalid console command'), { statusCode: 400 });
+    }
+    // Persist and stream dashboard-handled commands exactly as the operator entered them.
+    // This is used when a server mod does not expose its in-game command to the dedicated console.
     this.record(serverId, `> ${command}`, 'LIVE', 'command');
   }
 

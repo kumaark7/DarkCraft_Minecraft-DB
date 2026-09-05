@@ -51,6 +51,7 @@ export async function readPlayers(directory: string, onlinePlayers: Player[] = [
     const byName = [...players.values()].find((player) => player.username.toLowerCase() === entry.name?.toLowerCase());
     const existing = players.get(key) ?? byName;
     if (existing) {
+      existing.username = entry.name;
       if (entry.uuid) existing.uuid = entry.uuid;
       if (!players.has(key)) players.set(key, existing);
       return existing;

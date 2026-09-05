@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -84,6 +84,70 @@ describe('backend API guarantees', () => {
     expect(players.json().data).toEqual([expect.objectContaining({ username: 'Steve', uuid: 'uuid-steve', online: false, isOp: true })]);
     expect(bannedIps.json().data).toEqual([{ ip: '192.0.2.25', reason: 'Spam', bannedBy: 'Admin', date: '2026-09-02 00:00:00 +0000' }]);
     expect(mods.json().data).toEqual([expect.objectContaining({ id: 'real-mod', name: 'Real Mod', version: '3.1.4', size: expect.any(Number), loader: 'Fabric', minecraftCompatibility: '>=26.2 <27', status: 'Unknown' })]);
+    await context.app.close();
+  });
+
+  it('bridges console fwhitelist to the real Floodgate whitelist without changing case', async () => {
+    const cfg = await config(false);
+    const bedrockFetcher = (async () => new Response(JSON.stringify({
+      id: '0000000000000000000901f26d300855', name: '.Nocturne17Dani',
+    }))) as typeof fetch;
+    const context = await buildApp(cfg, { bedrockFetcher });
+    const headers = await authenticate(context);
+    const directory = path.join(cfg.serversRoot, 'bedrock-whitelist');
+    await mkdir(path.join(directory, 'config', 'floodgate'), { recursive: true });
+    await writeFile(path.join(directory, 'config', 'floodgate', 'config.yml'), 'username-prefix: "."\n');
+    await writeFile(path.join(directory, 'server.properties'), 'online-mode=false\n');
+    await writeFile(path.join(directory, 'whitelist.json'), JSON.stringify([{ uuid: 'java-uuid', name: 'JavaPlayer' }]));
+    const server: ManagedServer = {
+      id: 'bedrock-whitelist', name: 'Bedrock Whitelist', status: 'OFFLINE', software: 'Fabric', minecraftVersion: '26.2', javaVersion: 'Java 25',
+      ip: '0.0.0.0', port: 25565, playerCount: 0, maxPlayers: 20, cpu: null, ram: null, ramMax: 4096,
+      disk: null, diskMax: null, uptime: 0, directory, startupCommand: 'java -jar fabric.jar', startupExecutable: 'java', startupArgs: ['-jar', 'fabric.jar'], createdAt: new Date().toISOString(),
+    };
+    await context.store.update((state) => { state.servers.push(server); });
+
+    const added = await context.app.inject({
+      method: 'POST', url: '/api/v1/servers/bedrock-whitelist/console/commands', headers,
+      payload: { command: 'fwhitelist add Nocturne17Dani' },
+    });
+    expect(added.statusCode).toBe(200);
+    expect(JSON.parse(await readFile(path.join(directory, 'whitelist.json'), 'utf8'))).toEqual([
+      { uuid: 'java-uuid', name: 'JavaPlayer' },
+      { uuid: '00000000-0000-0000-0009-01f26d300855', name: '.Nocturne17Dani' },
+    ]);
+    const players = await context.app.inject({ method: 'GET', url: '/api/v1/servers/bedrock-whitelist/players', headers: { cookie: headers.cookie } });
+    expect(players.json().data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ username: '.Nocturne17Dani', uuid: '00000000-0000-0000-0009-01f26d300855', isWhitelisted: true }),
+    ]));
+    expect((await context.processes.readHistory(server.id, 'live')).some((entry) => entry.message === '> fwhitelist add Nocturne17Dani')).toBe(true);
+
+    const removed = await context.app.inject({
+      method: 'DELETE', url: '/api/v1/servers/bedrock-whitelist/players/whitelist', headers,
+      payload: { username: '.Nocturne17Dani', edition: 'bedrock', uuid: '00000000-0000-0000-0009-01f26d300855' },
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(JSON.parse(await readFile(path.join(directory, 'whitelist.json'), 'utf8'))).toEqual([{ uuid: 'java-uuid', name: 'JavaPlayer' }]);
+
+    const javaAdded = await context.app.inject({
+      method: 'POST', url: '/api/v1/servers/bedrock-whitelist/players/whitelist', headers,
+      payload: { username: 'Test123CAPa', edition: 'java' },
+    });
+    expect(javaAdded.statusCode).toBe(200);
+    expect(JSON.parse(await readFile(path.join(directory, 'whitelist.json'), 'utf8'))).toEqual([
+      { uuid: 'java-uuid', name: 'JavaPlayer' },
+      { uuid: 'a64a0144-06a3-322c-b775-7fa28832bf6b', name: 'Test123CAPa' },
+    ]);
+
+    const consoleAdded = await context.app.inject({
+      method: 'POST', url: '/api/v1/servers/bedrock-whitelist/console/commands', headers,
+      payload: { command: 'whitelist add ConsoleCase' },
+    });
+    expect(consoleAdded.statusCode).toBe(200);
+    const exactPlayers = await context.app.inject({ method: 'GET', url: '/api/v1/servers/bedrock-whitelist/players', headers: { cookie: headers.cookie } });
+    expect(exactPlayers.json().data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ username: 'Test123CAPa', uuid: 'a64a0144-06a3-322c-b775-7fa28832bf6b', isWhitelisted: true }),
+      expect.objectContaining({ username: 'ConsoleCase', isWhitelisted: true }),
+    ]));
     await context.app.close();
   });
 });
